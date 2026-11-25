@@ -245,6 +245,7 @@ table.ledger { width: 100%; border-collapse: collapse; }
 .ledger caption { text-align: left; font-weight: 600; padding-bottom: 8px; }
 .ledger th { text-align: left; font-weight: 600; font-size: 0.9375rem; color: var(--ink-2); border-bottom: 2px solid var(--ink); padding: 8px 12px 8px 0; white-space: nowrap; }
 .ledger td { border-bottom: 1px solid var(--rule); padding: 10px 12px 10px 0; vertical-align: top; }
+.ledger tbody th { border-bottom: 1px solid var(--rule); padding: 10px 12px 10px 0; font-size: 1rem; font-weight: 600; color: var(--ink); vertical-align: top; }
 .ledger th.num, .ledger td.num { text-align: right; padding-right: 12px; padding-left: 12px; font-variant-numeric: tabular-nums; }
 .ledger th.num:last-child, .ledger td.num:last-child { padding-right: 0; }
 .ledger tfoot td { border-bottom: 0; border-top: 2px solid var(--ink); font-weight: 700; }
@@ -384,3 +385,5 @@ table.ledger { width: 100%; border-collapse: collapse; }
 .advanced summary { cursor: pointer; font-weight: 600; min-height: 32px; }
 .advanced > label { margin-top: 6px; }
 @media (max-width: 480px) { .masthead { gap: 8px 10px; } }
+
+.range { width: 100%; max-width: 420px; margin: 10px 0 4px; accent-color: var(--cover); min-height: 28px; }
