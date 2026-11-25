@@ -6,6 +6,7 @@
   <title>Reins: let an AI assistant shop for you, on a short lead</title>
   <meta name="description" content="A simulation of a trust layer between an AI shopping assistant and a UPI-style payment rail: exact limits, a plain-language receipt for every order, undo, and evidence before the assistant gets more freedom. No real money.">
   <meta name="theme-color" content="#1f2e86">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preload" href="/fonts/anek-latin-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/app.css">
   <script type="module" src="/js/app.js"></script>
@@ -16,6 +17,7 @@
   <header class="masthead">
     <a class="wordmark" href="#/rules" aria-label="Reins, home">Reins</a>
     <p class="badge" id="badge">Simulation: synthetic shops, no real money</p>
+    <p class="badge" id="ai-badge" hidden></p>
     <div class="clock" id="clock"></div>
   </header>
 
@@ -34,6 +36,7 @@
 
   <footer class="colophon">
     <p>Every shop, price and person here is invented. Nothing connects to a bank, UPI or a real shop.</p>
+    <div class="colophon-actions" id="start-again"></div>
   </footer>
 </body>
 </html>
