@@ -342,7 +342,7 @@ function runReceipts(data, policy, shared) {
       const source = byId[c.from];
       if (!source) throw new Error(`receipt case ${c.id} refers to unknown policy case ${c.from}`);
       const { decision } = decideCase(source, policy.defaults, shared);
-      const receipt = buildReceipt(decision, { catalogue: CATALOGUE });
+      const receipt = buildReceipt(decision, { approved: Boolean(c.approved) });
       const text = receiptText(receipt);
       const e = c.expect;
       const expected = { headline: e.headline };
@@ -361,7 +361,7 @@ function runReceipts(data, policy, shared) {
     const violations = [];
     for (const source of Object.values(byId)) {
       const { decision } = decideCase(source, policy.defaults, shared);
-      const receipt = buildReceipt(decision, { catalogue: CATALOGUE });
+      const receipt = buildReceipt(decision, {});
       const text = receiptText(receipt);
       const allowed = allowedRupees(decision.figures);
       const stray = rupeeAmounts(text).filter((n) => !allowed.has(n));

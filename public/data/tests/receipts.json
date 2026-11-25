@@ -41,6 +41,12 @@
         "includes": ["An order for the same amount at the same shop was paid in the last 30 minutes.", "Together with another recent order at this shop it would pass your per-order limit of ₹1,500."] } },
     { "id": "R13", "from": "P049", "title": "A block used up exactly: shows zero left",
       "expect": { "headline": "Paid ₹500 to FreshBasket", "tone": "ok",
-        "includes": ["₹0 left on the payment block for FreshBasket."] } }
+        "includes": ["₹0 left on the payment block for FreshBasket."] } },
+    { "id": "R14", "from": "P002", "approved": true, "title": "An order the person approved: says so, and shows what is left after it",
+      "expect": { "headline": "Paid ₹1,200 to FreshBasket", "tone": "ok", "actions": ["undo"],
+        "includes": ["You approved this order.", "₹1,800 left of your ₹3,000 limit this week.", "You can undo this for 15 minutes."], "excludes": ["Why it went ahead"] } },
+    { "id": "R15", "from": "P005", "approved": true, "title": "Approval cannot turn a block into a payment",
+      "expect": { "headline": "Blocked: ₹1,501 at FreshBasket", "tone": "blocked", "actions": [],
+        "includes": ["No money moved."], "excludes": ["You approved this order."] } }
   ]
 }
