@@ -71,6 +71,9 @@
       "expect": { "fields": { "merchants": ["freshbasket"] }, "unresolved": [] } },
     { "id": "K23", "title": "The look-alike shop's name maps to its own id, so mandate validation can reject it",
       "model": { "merchants": ["FreshBaskett"] },
-      "expect": { "fields": { "merchants": ["freshbaskett"] }, "unresolved": [] } }
+      "expect": { "fields": { "merchants": ["freshbaskett"] }, "unresolved": [] } },
+    { "id": "K24", "title": "'weekend' on its own means Saturday and Sunday",
+      "model": { "blockedWeekdays": ["weekend"] },
+      "expect": { "fields": { "blockedWeekdays": ["sat", "sun"] }, "unresolved": [] } }
   ]
 }

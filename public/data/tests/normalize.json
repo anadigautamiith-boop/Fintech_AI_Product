@@ -104,6 +104,12 @@
       "expect": { "ok": true, "errors": [], "warnings": [], "mandate": { "validFrom": "2026-12-31", "validUntil": "2027-01-01" } } },
     { "id": "N33", "group": "dates", "title": "The end date handles a leap day",
       "today": "2028-02-28", "from": { "base": "M_GROC", "set": { "durationDays": 3 } },
-      "expect": { "ok": true, "errors": [], "warnings": [], "mandate": { "validFrom": "2028-02-28", "validUntil": "2028-03-01" } } }
+      "expect": { "ok": true, "errors": [], "warnings": [], "mandate": { "validFrom": "2028-02-28", "validUntil": "2028-03-01" } } },
+    { "id": "N34", "group": "duration", "title": "Exactly 90 days is kept as it is, with no warning",
+      "from": { "base": "M_GROC", "set": { "durationDays": 90 } },
+      "expect": { "ok": true, "errors": [], "warnings": [], "mandate": { "durationDays": 90, "validUntil": "2027-02-27" } } },
+    { "id": "N35", "group": "duration", "title": "91 days is cut to 90, with a warning",
+      "from": { "base": "M_GROC", "set": { "durationDays": 91 } },
+      "expect": { "ok": true, "errors": [], "warnings": ["DURATION_CLAMPED"], "mandate": { "durationDays": 90, "validUntil": "2027-02-27" } } }
   ]
 }

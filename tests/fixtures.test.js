@@ -40,7 +40,8 @@ test('order-style cases refer to mandates, banks and rungs that exist, and every
     for (const c of data.cases) {
       if (c.mandate) assert.ok(shared.mandates[c.mandate], `${f} ${c.id}: mandate ${c.mandate}`);
       if (c.bank) assert.ok(shared.banks[c.bank], `${f} ${c.id}: bank ${c.bank}`);
-      if (c.rung) assert.ok(rungs.has(c.rung), `${f} ${c.id}: rung ${c.rung}`);
+      if (c.rung && c.unknownRung) assert.ok(!rungs.has(c.rung), `${f} ${c.id}: marked unknownRung but ${c.rung} is a real rung`);
+      else if (c.rung) assert.ok(rungs.has(c.rung), `${f} ${c.id}: rung ${c.rung} (add "unknownRung": true if it is meant to be unknown)`);
       if (c.now) check(`${c.id}.now`, c.now);
       for (const e of c.ledger ?? []) {
         check(`${c.id}.ledger.ts`, e.ts);

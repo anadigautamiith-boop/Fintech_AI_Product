@@ -36,6 +36,12 @@
       "expect": { "potentialSpend": 3000, "blockSize": 3000, "backed": ["quickmart"], "unbacked": ["freshbasket"], "renewalsNeeded": 0, "warnings": ["BANK_BLOCK_LIMIT"] } },
     { "id": "C10", "group": "bank limits", "title": "A bank that allows three blocks backs three shops",
       "from": { "base": "M_GROC", "set": { "merchants": ["freshbasket", "quickmart", "spiceroute"], "categories": null, "periodCap": { "amount": 9000, "period": "week" }, "durationDays": 7 } }, "bank": { "maxActiveBlocks": 3 },
-      "expect": { "potentialSpend": 9000, "blockSize": 9000, "backed": ["freshbasket", "quickmart", "spiceroute"], "unbacked": [], "renewalsNeeded": 0, "warnings": ["RAIL_EXPOSURE_EXCEEDS_MANDATE"] } }
+      "expect": { "potentialSpend": 9000, "blockSize": 9000, "backed": ["freshbasket", "quickmart", "spiceroute"], "unbacked": [], "renewalsNeeded": 0, "warnings": ["RAIL_EXPOSURE_EXCEEDS_MANDATE"] } },
+    { "id": "C11", "group": "blocks", "title": "A monthly cap over 31 days spans two months: potential spend doubles",
+      "from": { "base": "M_GROC", "set": { "periodCap": { "amount": 4000, "period": "month" }, "durationDays": 31 } }, "bank": "B2",
+      "expect": { "days": 31, "potentialSpend": 8000, "blockSize": 8000, "backed": ["freshbasket", "quickmart"], "unbacked": [], "renewalsNeeded": 0, "warnings": ["RAIL_EXPOSURE_EXCEEDS_MANDATE"] } },
+    { "id": "C12", "group": "blocks", "title": "Potential spend of exactly 10,000 fits one block: no renewals, no warnings",
+      "from": { "base": "M_GROC", "set": { "merchants": ["freshbasket"], "periodCap": { "amount": 2500, "period": "week" }, "durationDays": 28 } }, "bank": "B2",
+      "expect": { "days": 28, "potentialSpend": 10000, "blockSize": 10000, "backed": ["freshbasket"], "unbacked": [], "renewalsNeeded": 0, "warnings": [] } }
   ]
 }

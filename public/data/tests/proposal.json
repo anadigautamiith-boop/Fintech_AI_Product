@@ -59,6 +59,9 @@
       "expect": { "ok": false, "errors": ["UNKNOWN_SKU", "BAD_QTY"] } },
     { "id": "B19", "title": "A SKU that is not text is unknown",
       "agentOutput": { "items": [ { "sku": 5, "qty": 1 } ] },
-      "expect": { "ok": false, "errors": ["UNKNOWN_SKU"] } }
+      "expect": { "ok": false, "errors": ["UNKNOWN_SKU"] } },
+    { "id": "B20", "title": "Lines for one SKU that add up to more than 99 are an error",
+      "agentOutput": { "items": [ { "sku": "FB-MILK", "qty": 60 }, { "sku": "FB-MILK", "qty": 60 } ] },
+      "expect": { "ok": false, "errors": ["BAD_QTY"] } }
   ]
 }

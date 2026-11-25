@@ -309,6 +309,13 @@
       "rung": "approve_each", "proposal": { "merchantId": "freshbasket", "amount": 1501 },
       "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["OVER_ORDER_CAP"] } },
 
+    { "id": "P085", "group": "rungs", "title": "An unknown rung is treated as suggest-only: an allowed order is only suggested",
+      "rung": "full_auto", "unknownRung": true, "proposal": { "merchantId": "freshbasket", "amount": 900 },
+      "expect": { "verdict": "allow", "outcome": "suggested", "reasons": [] } },
+    { "id": "P086", "group": "rungs", "title": "A rung named like an object internal is unknown too",
+      "rung": "__proto__", "unknownRung": true, "proposal": { "merchantId": "freshbasket", "amount": 900 },
+      "expect": { "verdict": "allow", "outcome": "suggested", "reasons": [] } },
+
     { "id": "Q01", "group": "undo", "title": "Undo frees the week's spend but not the rail block",
       "steps": [
         { "label": "a", "at": "2026-12-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1000 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
