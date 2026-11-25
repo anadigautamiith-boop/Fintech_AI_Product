@@ -84,6 +84,17 @@ Warnings (created, shown to the person): `DURATION_DEFAULTED` (null becomes 30),
 
 Amounts must be integers from 1 to 1,000,000.
 
+Details the tests rely on:
+
+- Each error is `{code, field, message}`, where `field` is the raw field name (`BAD_AMOUNT` is reported per field: `perOrderCap`, `periodCap` or `askAbove`). Each warning is `{code, field, message}` with `field` possibly `null`.
+- Merchant and category ids are matched exactly: no trimming, no case folding. The mandate reader (section 11) maps names to ids before this step.
+- A missing field is treated as `null`. Unknown fields are dropped, not copied.
+- `[]` for merchants or categories becomes `null`. Duplicates are removed, keeping first-seen order. `blockedWeekdays` is returned in week order.
+- `periodCap` must be `null` or `{amount, period}`. Anything else, or a period other than `day`, `week`, `month`, is `BAD_PERIOD`; a bad `amount` inside it is `BAD_AMOUNT`.
+- `autoApproveIrreversible` is `false` when missing or `null`; any other non-boolean is `BAD_FLAG`.
+- `durationDays` must be a whole number of 1 or more. `null` becomes 30 (`DURATION_DEFAULTED`); above 90 becomes 90 (`DURATION_CLAMPED`); anything else is `BAD_DURATION`.
+- When there are errors, `mandate` is `null` and `warnings` is empty.
+
 ## 5. Compile: mandate to rail blocks
 
 `compileMandate(mandate, bank)` where `bank = {maxActiveBlocks}`.
@@ -96,7 +107,7 @@ Amounts must be integers from 1 to 1,000,000.
 
 Warnings: `ANY_MERCHANT_NOT_RAIL_BACKABLE`, `BANK_BLOCK_LIMIT` (some merchants unbacked), `NO_PERIOD_CAP` (blocks exist but no period cap, so only the ₹10,000 block limits total spend), `RAIL_EXPOSURE_EXCEEDS_MANDATE` (the blocks together allow more than `potentialSpend`; only the layer enforces the lower cap), `BLOCK_RENEWALS_NEEDED`.
 
-`rules` lists each set field with who enforces it: `rail+layer` for the merchant list (backed merchants) and expiry; `layer` for the rest.
+`rules` lists each set field with who enforces it: `rail+layer` for the merchant list (backed merchants) and expiry; `layer` for the rest. Each entry is `{field, enforcedBy}`; `field` is one of `merchants`, `categories`, `perOrderCap`, `periodCap`, `blockedWeekdays`, `askAbove`, `autoApproveIrreversible` (listed only when true) or `duration`. When some merchants are backed and some are not, `merchants` appears twice, once for each group (with `merchantIds`). `duration` is `rail+layer` when at least one block exists and `layer` otherwise.
 
 ## 6. Policy engine
 
@@ -130,7 +141,20 @@ Comparisons against caps are strict (`amount > cap` blocks; `amount == cap` does
 
 ### 6.4 Figures
 
-For every evaluation that reaches step 5, the decision carries `figures`: amount, merchant name, category, `perOrderCap`, `askAbove`, the period figures (`cap`, `spentBefore`, `remainingBefore`, `remainingAfter`, `kind`) and the rail figures (`limit`, `used`, `remainingBefore`, `remainingAfter`). Receipts read numbers only from `figures`.
+For every evaluation that reaches step 5, the decision carries `figures`: amount, merchant name, category, `perOrderCap`, `askAbove`, the period figures (`kind`, `cap`, `spentBefore`, `remainingBefore`, `remainingAfter`) and the rail figures (`limit`, `used`, `remainingBefore`, `remainingAfter`). Receipts read numbers only from `figures`. An evaluation that stops earlier (steps 1 to 4) has `figures: null`.
+
+`remainingBefore = max(0, cap - spentBefore)` and `remainingAfter = max(0, cap - spentBefore - amount)`, for both the period and the rail. A merchant with no block has `limit`, `remainingBefore` and `remainingAfter` all `null`; `used` is still reported. `figures.undo` is `{reversible, windowMin}` from the category.
+
+A decision is `{verdict, outcome, reasons, figures}`.
+
+### 6.5 State changes
+
+The engine only reads state. These functions change it, and return a new state each time.
+
+- `recordOrder(state, {merchantId, amount, ts}, catalogue)`: adds a `paid` order with the next id (`O1`, `O2`, ...) and adds `amount` to `railUsed[merchantId]`.
+- `undoOrder(state, orderId, now, catalogue)`: returns `{ok: true, state}` or `{ok: false, reason}`. Checks run in this order: `UNKNOWN_ORDER`, `ALREADY_REFUNDED`, `NOT_REVERSIBLE` (category cannot be undone), `UNDO_WINDOW_CLOSED` (more than the category's window since the order; exactly at the window is still allowed). On success the order becomes `refunded`. `railUsed` does not change.
+- `approveOrder({mandate, compiled, state, proposal, now, catalogue})`: a person approves a proposal that was `awaiting_approval` or `suggested`. The checks run again at `now`. A `block` verdict executes nothing and returns `{executed: false, decision}`. An `allow` or `ask` verdict records the order and returns `{executed: true, decision, state}`.
+- `setPaused(state, paused)`.
 
 ## 7. Autonomy ladder
 
@@ -171,9 +195,10 @@ Undo rules:
 | food delivery | yes | 3 minutes |
 | general merchandise | yes | 60 minutes |
 | mobile recharge | no | none |
-| gift cards | no | none |
 
-Undo marks the order `refunded`. The period spend drops. The rail block does not recover (section 3).
+Undo marks the order `refunded`. The period spend drops. The rail block does not recover (section 3). Rules for undo are in section 6.5.
+
+Gift cards are not a category in v1, because policy is not item-level (section 13). A gift card sold by a grocery merchant is treated as groceries, with a 15-minute undo window that a real gift card would not have. This is recorded as known gap KG3.
 
 ## 9. Shadow mode (synthetic)
 
@@ -198,9 +223,26 @@ The hidden-gap set is built to look healthy overall (below 10%) while one segmen
 
 Two model calls exist. Both are untrusted: their output is validated by code, and the engine never takes a model's word.
 
-**Mandate reader** (`POST /api/parse-mandate`): plain text in, structured fields out. Only what the text states; `null` otherwise. Amounts in rupees; "2k" is 2000; a week is 7 days, a month 30. Output goes through `coerceParsed`, which maps shop and category names to ids, rejects anything it cannot map into `unresolved`, and never invents a value. A person always confirms the result in a form; the model never activates a mandate.
+**Mandate reader** (`POST /api/parse-mandate`): plain text in, structured fields out. Only what the text states; `null` otherwise. Amounts in rupees; "2k" is 2000; a week is 7 days, a month 30. If the text contradicts itself on a field, the field is `null` and the model adds a note. Output goes through `coerceParsed(modelOutput, catalogue)`, which returns `{fields, unresolved, notes}`:
 
-**Shopping agent** (`POST /api/agent`): a request and a slice of the catalogue in, `{items: [{sku, qty}], note}` out. The merchant is derived from the SKUs; mixed-merchant orders are invalid. The total is computed from catalogue prices, never taken from the model. The catalogue contains listing text from sellers, some of it hostile (the injection test set).
+- It reads only the known keys, so extra keys, `__proto__` and similar are ignored. Output that is not an object gives all-null fields.
+- Shop and category names are matched to ids ignoring case and extra spaces, using the catalogue's aliases. A name it cannot match goes to `unresolved` and is left out of `fields`.
+- Amounts: a whole number, or text such as `₹2,000`, `Rs. 1.5k`, `2k`. Anything else, including non-integers and number words, goes to `unresolved`.
+- Periods: `day`, `daily`, `week`, `weekly`, `per week`, `month`, `monthly`, `per month` and similar map to `day`, `week`, `month`; anything else is unresolved.
+- Weekdays: day names and short names, with `weekend` meaning Saturday and Sunday. Unknown words are unresolved.
+- `autoApproveIrreversible` is `true` only when the model returns the boolean `true`.
+- A lone string where a list is expected is treated as a list of one.
+
+Dropping an unmatched shop could widen a mandate (a text that says "only Zomato" would become "any shop"). So the app does not let a person activate a mandate while `unresolved` has entries; each must be fixed in the form or dismissed on purpose. A person always confirms the result in a form; the model never activates a mandate.
+
+**Shopping agent** (`POST /api/agent`): a request and a slice of the catalogue in, `{items: [{sku, qty}], note}` out. The slice shows names, prices and seller listing text, not the `verified` flag. `buildProposal(catalogue, agentOutput)` turns this into a proposal and checks it:
+
+- `items` must be a non-empty array of at most 20 lines. Every `sku` must be an own property of the catalogue's items (`UNKNOWN_SKU`). Every `qty` must be a whole number from 1 to 99 (`BAD_QTY`).
+- The merchant is derived from the SKUs; mixed-merchant orders are invalid (`MIXED_MERCHANTS`). Lines with the same SKU are merged.
+- The amount is the sum of catalogue price times quantity. Prices, totals and any other fields in the model output are ignored.
+- Errors: `NO_ITEMS`, `TOO_MANY_LINES`, `UNKNOWN_SKU`, `BAD_QTY`, `MIXED_MERCHANTS`. The builder does not judge the merchant; an order for an unverified shop is built, and the policy engine blocks it.
+
+The catalogue contains listing text from sellers, some of it hostile (the injection test set).
 
 If the platform has no AI available (quota, binding missing), both endpoints return `ai_unavailable` and the app falls back to the form and to a scripted agent.
 
@@ -229,3 +271,25 @@ Deterministic suites run in Node (`npm test`) and in the browser on the Tests pa
 ## 13. Not built
 
 Real UPI, bank or merchant integration; KYC; accounts and authentication; multi-user or multi-device sync; real payments or refunds; the local-agent persona; cross-border, wearables, tipping and negotiation; item-level policy (categories per item); price-anomaly or quantity-anomaly detection; Hindi UI; paise. Each is a deliberate cut, listed again in the write-up.
+
+## Appendix A. Module shapes the tests use
+
+All modules are ES modules under `public/js/core/`, with no dependencies and no browser or Node APIs, so the browser, the Worker and Node run the same code.
+
+| Module | Exports |
+|---|---|
+| `time.js` | `parseInstant(isoOrMs)`, `istDate(ms)`, `istWeekday(ms)` (`mon`..`sun`), `addDays(date, n)`, `dayStart(date)`, `dayEnd(date)`, `windowFor(period, ms)` (`{start, end}` for the IST day, Monday-to-Sunday week or month) |
+| `money.js` | `isMandateAmount(n)`, `isPositiveSafeInt(n)`, `formatRupees(n)` (`₹1,200`; Indian grouping above 99,999, so `₹1,00,000`) |
+| `catalogue.js` | `getMerchant(cat, id)` (own property only), `categoryOf(cat, merchantId)`, `matchMerchantName(cat, text)`, `matchCategoryName(cat, text)` |
+| `mandate.js` | `normalizeMandate(raw, {today, catalogue})` |
+| `rail.js` | `compileMandate(mandate, bank)` returning `{days, potentialSpend, blockSize, blocks: [{merchantId, limit}], unbacked, renewalsNeeded, warnings: [{code, message}], rules}` |
+| `policy.js` | `evaluate({mandate, compiled, state, proposal, now, catalogue, rung})`, `routeOutcome(verdict, rung)` |
+| `state.js` | `newState()`, `recordOrder`, `undoOrder`, `approveOrder`, `setPaused` |
+| `receipt.js` | `buildReceipt(decision, {catalogue})` returning `{headline, tone, lines, actions, undo}` |
+| `ladder.js` | `checkPromotion({from, weeks, segments, consent})` returning `{allowed, to, failures: [{code, segment}], overall, bySegment}` |
+| `shadow.js` | `generateShadowEvents({set, seed, weeks, eventsPerWeek})`, `summarizeEvents(events)` |
+| `proposal.js` | `buildProposal(catalogue, agentOutput)` |
+| `coerce.js` | `coerceParsed(modelOutput, catalogue)` |
+| `suites.js` | `runSuite(id, data, shared)`: runs the labelled cases for one deterministic suite and returns one result per case; used by `npm test` and by the Tests page |
+
+`now`, `ts` and every instant in the engine are milliseconds since the epoch; fixtures write them as ISO-8601 strings with an explicit offset and the suite runner converts them.
