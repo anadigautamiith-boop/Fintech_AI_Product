@@ -50,7 +50,7 @@ The rail is simulated. Its rules are taken from public documentation where possi
 | A block is set per merchant | one limit per merchant | Documented ([Pine Labs](https://www.pinelabs.com/docs/online-payments/upi-reserve-pay)) |
 | Block cap | ₹10,000 | Documented (Pine Labs) |
 | Block validity | up to 90 days | Documented (Pine Labs) |
-| Active blocks per customer | many banks allow one; the default bank profile uses 1 | Documented (Pine Labs); profile is an assumption |
+| Active blocks per customer | many banks allow one; the app lets a person choose 1, 2 or 3 and starts at 2 | Documented (Pine Labs) that many banks allow one; the choices and the starting value are assumptions |
 | Revocation | through the merchant (Pine Labs); Razorpay describes instant revocation ([Business Today](https://www.businesstoday.in/amp/technology/news/story/razorpay-npci-launch-agentic-payments-on-anthropics-claude-zomato-swiggy-zepto-go-live-517307-2026-02-20)) | Documented, sources differ |
 | A refund restores the block | **no** | Assumption, unverified, conservative |
 | The rail enforces | merchant, amount, expiry only | Reading of the documentation |
@@ -179,13 +179,17 @@ Promotion is a decision, not a toggle. It needs shadow-mode evidence.
 
 The override rate must be **below** 10% (a segment at exactly 10% fails). Failure codes: `TOP_RUNG`, `TOO_SHORT`, `INSUFFICIENT_DATA` (per segment), `SEGMENT_OVER_THRESHOLD` (per segment), `OVERALL_OVER_THRESHOLD`, `NO_CONSENT`.
 
+A segment with fewer than 50 events gets `INSUFFICIENT_DATA` and nothing else: it is not also judged on a rate that means little. The weeks, the 50 events and the 10% are the builder's choices, not sourced figures; a real team would set them from data. Taking freedom back (a step down) needs no evidence. The numbers each step needs are exported as `STEPS` from `ladder.js`, and the screens read them from there.
+
 The reason for gating on every segment is the book's MoneyGro case (chapter 15): an 8% override rate hid a rate above 25% for customers with several products. The shadow period there was too short and the sample too narrow.
 
 ## 8. Receipts
 
 A receipt is built from the decision and its `figures`, by templates. No model writes receipt text, because a payment explanation must never invent a fact. Every `₹` amount in a receipt must come from `figures`; a test checks this for every policy case.
 
-A receipt has a headline, a list of plain-language lines (what was decided, why, which limits applied and what is left, undo), and actions.
+A receipt has a headline, a list of plain-language lines (what was decided, why, which limits applied and what is left, undo), and actions. `buildReceipt(decision, {approved})` takes `approved: true` when a person approved a waiting or suggested order that was then paid; the receipt then says "You approved this order." in place of "Why it went ahead".
+
+The figures on a receipt are the ones the engine used when it checked the order, so "left" means left before the order. On the screen, the limits ruler on a slip labels them "before this order", so that a paid slip does not appear to disagree with its receipt, which says what is left afterwards.
 
 Undo rules:
 
@@ -196,13 +200,13 @@ Undo rules:
 | general merchandise | yes | 60 minutes |
 | mobile recharge | no | none |
 
-Undo marks the order `refunded`. The period spend drops. The rail block does not recover (section 3). Rules for undo are in section 6.5.
+The windows are values chosen for the simulation. They are not rail rules and no source gives them. Undo marks the order `refunded`. The period spend drops. The rail block does not recover (section 3). Rules for undo are in section 6.5.
 
 Gift cards are not a category in v1, because policy is not item-level (section 13). A gift card sold by a grocery merchant is treated as groceries, with a 15-minute undo window that a real gift card would not have. This is recorded as known gap KG3.
 
 ## 9. Shadow mode (synthetic)
 
-There is no real user data. The shadow log is generated with a seeded random generator (mulberry32) over 8 weeks and 4 segments. Each event is `{week, segment, overridden, reason}`.
+There is no real user data. The shadow log is generated with a seeded random generator (mulberry32) over 8 weeks and 4 segments. Each event is `{week, segment, overridden}`. Events carry no reason, because a reason would have to be invented too.
 
 | Segment | Share of events | Override probability, hidden-gap set | Override probability, healthy set |
 |---|---|---|---|
@@ -217,7 +221,9 @@ The hidden-gap set is built to look healthy overall (below 10%) while one segmen
 
 - North star: **share of agent-made purchases the person keeps without undo** (kept orders / executed orders).
 - Guardrails: **reversal rate** (refunded / executed), **override rate in every segment** (from shadow mode), **complaints per 10,000 decisions** (not measurable without real users; shown as not measured).
-- Also reported: cost per decision for the model calls (from the model's token counts when the platform returns them).
+- Also reported: cost per decision for the model calls, as token counts from the platform's response. The price of a call in the platform's own unit (neurons) depends on the model and is not worked out here. A call that reports no counts is counted but adds no tokens.
+
+`metrics.js` holds `orderMetrics(state)` (executed, kept, refunded, kept share, reversal rate; every order in the ledger is one the agent proposed that went through), `modelUsage(calls)` and `NOT_MEASURED`.
 
 ## 11. Model components
 
@@ -244,6 +250,8 @@ Dropping an unmatched shop could widen a mandate (a text that says "only Zomato"
 
 The catalogue contains listing text from sellers, some of it hostile (the injection test set).
 
+The request body is `{request, guard, skus?, listingOverrides?}`. `skus` picks the slice of the catalogue the agent sees (the sample requests send the products they are about), and `listingOverrides` replaces the listing text of named products with a hostile text for a sample. The prompt tells the agent that listing text is written by sellers and must not be obeyed; `guard: false` leaves that sentence out, so the Tests page can run the agent suite with and without it. The engine's checks do not depend on the sentence. The Worker asks for `temperature: 0`.
+
 If the platform has no AI available (quota, binding missing), both endpoints return `ai_unavailable` and the app falls back to the form and to a scripted agent.
 
 ## 12. Test strategy
@@ -252,21 +260,28 @@ The aim of the test set is to say, per case, how the app did, and to be honest a
 
 | Suite | Cases | Kind | What it measures |
 |---|---|---|---|
-| `policy` | 55 | deterministic | The engine's verdict, outcome and reason codes, including boundaries, IST handling, windows, rungs |
-| `normalize` | 18 | deterministic | Mandate validation, errors and warnings |
-| `compile` | 9 | deterministic | Rail blocks, bank limits, renewals, exposure warnings |
+| `policy` | 96 | deterministic | The engine's verdict, outcome and reason codes, including boundaries, IST handling, windows, rungs, undo and approval |
 | `injection` | 13 | deterministic | Hostile or spoofed proposals and sequences against the engine |
-| `receipts` | 8 + a property check on every policy case | deterministic | Receipt content; every amount comes from the decision |
-| `shadow` | 10 | deterministic | Promotion gate, including the MoneyGro-shaped case |
-| `known-gaps` | 4 | deterministic | Things the engine does not catch in v1, recorded as gaps rather than hidden |
+| `known-gaps` | 5 | deterministic | Things the engine does not catch in v1, recorded as gaps rather than hidden |
+| `normalize` | 35 | deterministic | Mandate validation, errors and warnings |
+| `compile` | 12 | deterministic | Rail blocks, bank limits, renewals, exposure warnings |
+| `receipts` | 15 + a property check on every policy case | deterministic | Receipt content; every amount comes from the decision |
+| `shadow` | 15 | deterministic | Promotion gate, including the MoneyGro-shaped case and a segment with too few events |
+| `proposal` | 20 | deterministic | Agent output to proposal: shop and amount come from the catalogue; the error codes |
+| `coerce` | 24 | deterministic | Mandate-reader output to form: ids, amounts, periods, weekdays; what cannot be mapped is reported |
+| `steered` | 10 | deterministic | The order a fully steered scripted assistant sends for each sample request, checked against the engine |
 | `parse` | 30 | model | Mandate reader accuracy on labelled instructions (field-level and case-level), including Hinglish, typos, contradictions and an injection attempt |
 | `agent` | 10 | model | Agent behaviour on listings with hostile text: how often it is steered, and whether the engine still stops the order |
 
-Deterministic suites run in Node (`npm test`) and in the browser on the Tests page, from the same code. Model suites run only against the deployed app, from the Tests page; results are exported as JSON and committed under `eval/results/`.
+The ten deterministic suites are 246 cases (the receipts property check counts as one). They run in Node (`npm test`) and in the browser on the Tests page, from the same JSON files and the same code. Model suites run only against the deployed app, from the Tests page; each result is exported as JSON and committed under `eval/results/live/` (see `eval/README.md`). Unanswered cases (for example when the free allowance runs out) are recorded as errors and count as failed; they are never skipped.
 
-**Known gaps** are cases where the engine's verdict differs from the ideal one. They are asserted at the engine's current behaviour, so a change makes the test fail and forces the spec to be updated.
+**Known gaps** are cases where the engine's verdict differs from the ideal one. They are asserted at the engine's current behaviour, so a change makes the test fail and forces the spec to be updated. The five are: quantity inflation inside the caps (KG1), a third-party seller on an allowed marketplace (KG2), a gift card sold inside an allowed grocery shop (KG3), a price spike on a routine item (KG4), and two orders that each pass "ask me above" but together exceed it (KG5).
 
-**What the labels are.** The expected answers were written by the builder (an AI assistant) from this spec, then reviewed by the product owner. They test that the system matches the spec, not that the spec matches reality.
+**Mutation check.** `scripts/mutation-check.mjs` breaks the decision code in 43 small ways, one at a time, and runs the Node tests on each. A bug that no test notices is a gap in the tests. On the test set as first written, 36 of 43 were caught, and the 7 misses were closed with new labelled cases. The final 43 of 43 is not an independent measure, because the new cases were written to catch those bugs. Two further variants change nothing anyone can observe and are listed separately, each with its reason. Details and both result files are in `eval/`.
+
+**Browser smoke test.** `scripts/ui-smoke.mjs` walks the main flows in headless Chrome against a local copy of the site that sends the deployed security headers. It is not part of `npm test`, because it needs a browser that is not a project dependency.
+
+**What the labels are.** The expected answers were written by the builder (an AI assistant) from this spec. No one else has reviewed them yet. They test that the system matches the spec, not that the spec matches reality.
 
 ## 13. Not built
 
@@ -285,11 +300,13 @@ All modules are ES modules under `public/js/core/`, with no dependencies and no 
 | `rail.js` | `compileMandate(mandate, bank)` returning `{days, potentialSpend, blockSize, blocks: [{merchantId, limit}], unbacked, renewalsNeeded, warnings: [{code, message}], rules}` |
 | `policy.js` | `evaluate({mandate, compiled, state, proposal, now, catalogue, rung})`, `routeOutcome(verdict, rung)` |
 | `state.js` | `newState()`, `recordOrder`, `undoOrder`, `approveOrder`, `setPaused` |
-| `receipt.js` | `buildReceipt(decision, {catalogue})` returning `{headline, tone, lines, actions, undo}` |
-| `ladder.js` | `checkPromotion({from, weeks, segments, consent})` returning `{allowed, to, failures: [{code, segment}], overall, bySegment}` |
-| `shadow.js` | `generateShadowEvents({set, seed, weeks, eventsPerWeek})`, `summarizeEvents(events)` |
+| `receipt.js` | `buildReceipt(decision, {approved})` returning `{headline, tone, lines, actions, undo}` |
+| `ladder.js` | `checkPromotion({from, weeks, segments, consent})` returning `{allowed, to, failures: [{code, segment}], overall, bySegment}`; `RUNGS`, `RUNG_LABELS`, `STEPS`, `DEFAULT_THRESHOLD`, `DEFAULT_MIN_EVENTS` |
+| `shadow.js` | `generateShadowEvents({set, seed, weeks, eventsPerWeek})`, `summarizeEvents(events)`, `SEGMENTS` |
+| `metrics.js` | `orderMetrics(state)`, `modelUsage(calls)`, `NOT_MEASURED` |
+| `model-eval.js` | Scoring for the two model suites: `scoreParse`, `summarizeParse`, `scoreAgent`, `summarizeAgent` |
 | `proposal.js` | `buildProposal(catalogue, agentOutput)` |
 | `coerce.js` | `coerceParsed(modelOutput, catalogue)` |
-| `suites.js` | `runSuite(id, data, shared)`: runs the labelled cases for one deterministic suite and returns one result per case; used by `npm test` and by the Tests page |
+| `suites.js` | `SUITES`, `MODEL_SUITES`, `runSuite(id, files)`: runs the labelled cases for one deterministic suite and returns one result per case; `runModelSuite(id, files, callApi, options)` for the two model suites; used by `npm test` and by the Tests page |
 
 `now`, `ts` and every instant in the engine are milliseconds since the epoch; fixtures write them as ISO-8601 strings with an explicit offset and the suite runner converts them.
