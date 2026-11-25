@@ -222,8 +222,8 @@ export function fencesFromFigures(figures) {
   const fences = [];
   if (figures.askAbove !== null) fences.push({ key: 'ask', label: 'Ask me above', value: figures.askAbove, who: 'app', kind: 'ask' });
   if (figures.perOrderCap !== null) fences.push({ key: 'order', label: 'Most for one order', value: figures.perOrderCap, who: 'app', kind: 'limit' });
-  if (figures.period.cap !== null) fences.push({ key: 'period', label: `Left this ${figures.period.kind}`, value: figures.period.remainingBefore, who: 'app', kind: 'limit' });
-  if (figures.rail.limit !== null) fences.push({ key: 'rail', label: 'Left on the bank’s payment block', value: figures.rail.remainingBefore, who: 'bank', kind: 'limit' });
+  if (figures.period.cap !== null) fences.push({ key: 'period', label: `Left this ${figures.period.kind}, before this order`, value: figures.period.remainingBefore, who: 'app', kind: 'limit' });
+  if (figures.rail.limit !== null) fences.push({ key: 'rail', label: 'Left on the bank’s payment block, before this order', value: figures.rail.remainingBefore, who: 'bank', kind: 'limit' });
   return fences;
 }
 

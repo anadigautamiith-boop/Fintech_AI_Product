@@ -146,9 +146,21 @@ function paintHealth() {
   for (const fn of [...healthListeners]) fn(hl);
 }
 
+/** The "Skip to the page" link must move focus, not the address: a hash that is not a route would send the router back to the Rules page. */
+function mountSkipLink() {
+  const link = document.querySelector('a.skip');
+  if (!link) return;
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    main.focus();
+    main.scrollIntoView({ block: 'start' });
+  });
+}
+
 async function boot() {
   mountClock();
   mountStartAgain();
+  mountSkipLink();
   window.addEventListener('hashchange', show);
   await show();
   const hl = await checkHealth();

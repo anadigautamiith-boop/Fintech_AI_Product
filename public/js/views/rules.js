@@ -172,7 +172,8 @@ export function mount(root, ctx) {
   function renderPreview(s, draft) {
     const { check, compiled } = draft;
     if (!check.ok) {
-      fill(preview, notice('block', pluralize(check.errors.length, 'problem') + ' to fix before these rules can be activated.', h('ul', null, check.errors.map((e) => h('li', null, e.message)))));
+      // Not role="alert": this is redrawn on every keystroke, and a screen reader would repeat it each time. The field's own message is linked to it.
+      fill(preview, h('div', { class: 'notice notice-block' }, h('strong', null, pluralize(check.errors.length, 'problem') + ' to fix before these rules can be activated.'), h('ul', null, check.errors.map((e) => h('li', null, e.message)))));
       return;
     }
     const blocks = compiled.blocks.length

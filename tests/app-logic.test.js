@@ -234,6 +234,8 @@ test('fences come from the engine figures and from the mandate, with the bank ke
   const figures = { askAbove: 1000, perOrderCap: 1500, period: { cap: 3000, kind: 'week', remainingBefore: 2200 }, rail: { limit: 10000, remainingBefore: 9000 } };
   assert.deepEqual(fencesFromFigures(figures).map((f) => [f.key, f.value]), [['ask', 1000], ['order', 1500], ['period', 2200], ['rail', 9000]]);
   assert.deepEqual(fencesFromFigures({ askAbove: null, perOrderCap: null, period: { cap: null }, rail: { limit: null } }), []);
+  // The figures are what was left when the order was checked. A paid receipt says what is left now, so the ruler must not look like it disagrees.
+  for (const f of fencesFromFigures(figures).filter((x) => x.key === 'period' || x.key === 'rail')) assert.match(f.label, /before this order/);
 });
 
 // ------------------------------------------------------------------ the store
