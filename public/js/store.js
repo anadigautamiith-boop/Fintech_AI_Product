@@ -9,11 +9,11 @@ import { compileMandate } from './core/rail.js';
 import { evaluate } from './core/policy.js';
 import { approveOrder, newState, recordOrder, setPaused, undoOrder } from './core/state.js';
 import { buildProposal } from './core/proposal.js';
-import { checkPromotion } from './core/ladder.js';
+import { RUNGS, checkPromotion } from './core/ladder.js';
 import { generateShadowEvents, summarizeEvents } from './core/shadow.js';
 import { orderMetrics } from './core/metrics.js';
 import { isSteered } from './core/model-eval.js';
-import { DEFAULT_FORM, DEFAULT_INSTRUCTIONS, defaultClock, formToRaw } from './logic.js';
+import { DEFAULT_FORM, DEFAULT_INSTRUCTIONS, defaultClock, formToRaw, presetById } from './logic.js';
 
 const KEY = 'reins.v1';
 export const SHADOW_SEED = 7;
@@ -29,6 +29,8 @@ function initial(nowMs = Date.now()) {
     unresolved: [],
     notes: [],
     mandate: null,
+    compiled: null,
+    activeForm: null,
     bankSlots: 2,
     rung: 'suggest',
     ledgerState: newState(),
@@ -90,13 +92,22 @@ export function reset(nowMs) {
 
 // ---------------------------------------------------------------- derived
 
-export function compiled(state = S) {
-  return state.mandate ? compileMandate(state.mandate, { maxActiveBlocks: state.bankSlots }) : null;
-}
+/** The payment blocks as they were made when the rules were activated. */
+export const compiled = (state = S) => state.compiled;
 
 /** The form's current rules as the engine would read them (or the errors). */
 export function checkForm(state = S) {
   return normalizeMandate(formToRaw(state.form), { today: istDate(state.clockMs), catalogue: CATALOGUE });
+}
+
+/** The form as it stands, checked, with the payment blocks it would make, and whether it differs from the active rules. */
+export function draft(state = S) {
+  const check = checkForm(state);
+  return {
+    check,
+    compiled: check.ok ? compileMandate(check.mandate, { maxActiveBlocks: state.bankSlots }) : null,
+    changed: !state.mandate || JSON.stringify(state.form) !== JSON.stringify(state.activeForm) || state.bankSlots !== state.compiled.bank.maxActiveBlocks,
+  };
 }
 
 export function metrics(state = S) {
@@ -125,6 +136,14 @@ export const setInstructions = (instructions) => commit({ instructions });
 export const setForm = (patch) => commit({ form: { ...S.form, ...patch } });
 export const setBankSlots = (bankSlots) => commit({ bankSlots });
 
+/** Fill the form and the sentences from an example rule set. Nothing is activated. */
+export function applyPreset(id) {
+  const preset = presetById(id);
+  if (!preset) return false;
+  commit({ form: structuredClone(preset.form), instructions: preset.instructions, unresolved: [], notes: [] });
+  return true;
+}
+
 /** The reader's answer replaces the form; open items must be settled before the rules can be activated. */
 export function applyReader({ form, unresolved, notes }) {
   commit({ form, unresolved, notes });
@@ -143,7 +162,12 @@ export function activate() {
   if (!r.ok) return r;
   // Activating asks the bank for fresh payment blocks, so what the old blocks had used is not carried over.
   // Only the person can do this: no order, and no model, can create a block. Past orders still count toward the period limit.
-  commit({ mandate: r.mandate, ledgerState: { ...S.ledgerState, railUsed: {} } });
+  commit({
+    mandate: r.mandate,
+    compiled: compileMandate(r.mandate, { maxActiveBlocks: S.bankSlots }),
+    activeForm: structuredClone(S.form),
+    ledgerState: { ...S.ledgerState, railUsed: {} },
+  });
   return r;
 }
 
@@ -242,6 +266,14 @@ export function promote() {
   if (!gate.allowed) return gate;
   commit({ rung: gate.to, evidence: { ...S.evidence, consent: false } });
   return gate;
+}
+
+/** Taking freedom back needs no evidence and happens at once. */
+export function stepDown() {
+  const i = RUNGS.indexOf(S.rung);
+  if (i <= 0) return false;
+  commit({ rung: RUNGS[i - 1], evidence: { ...S.evidence, consent: false } });
+  return true;
 }
 
 export function resetAll() {

@@ -17,7 +17,8 @@ export const BOOK_RUNG = { suggest: 1, approve_each: 2, bounded: 3 };
 export const DEFAULT_THRESHOLD = 0.1;
 export const DEFAULT_MIN_EVENTS = 50;
 
-const STEPS = {
+/** What each step up needs. The screens read these numbers from here, so they cannot disagree with the gate. */
+export const STEPS = {
   suggest: { to: 'approve_each', minWeeks: 4, needsConsent: false },
   approve_each: { to: 'bounded', minWeeks: 8, needsConsent: true },
 };

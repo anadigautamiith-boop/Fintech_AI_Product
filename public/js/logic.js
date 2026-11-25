@@ -2,8 +2,11 @@
 // The views in js/views/ only draw what this and the engine in js/core/ decide.
 
 import { CATALOGUE } from './core/catalogue-data.js';
-import { MINUTE_MS, WEEKDAYS, addDays, dayStart, istDate, istWeekday } from './core/time.js';
+import { MINUTE_MS, WEEKDAYS, addDays, dayStart, istDate, istWeekday, windowFor } from './core/time.js';
 import { formatRupees } from './core/money.js';
+import { buildReceipt } from './core/receipt.js';
+import { DEFAULT_MIN_EVENTS, DEFAULT_THRESHOLD, RUNG_LABELS, STEPS } from './core/ladder.js';
+import { percent } from './ui/format.js';
 
 export const DEFAULT_INSTRUCTIONS =
   'Weekly ₹3000 for groceries from FreshBasket and QuickMart. Nothing on weekends. Ask me for anything above ₹1000. Max ₹1500 per order. Valid for 2 months.';
@@ -19,6 +22,40 @@ export const DEFAULT_FORM = Object.freeze({
   autoApproveIrreversible: false,
   durationDays: '60',
 });
+
+/** Rule sets a person can start from. They match the mandates the labelled test cases use, so a sample request runs under the rules it was written for. */
+export const PRESETS = Object.freeze([
+  { id: 'groceries', label: 'Groceries every week', mandate: 'M_GROC', instructions: DEFAULT_INSTRUCTIONS, form: DEFAULT_FORM },
+  {
+    id: 'food',
+    label: 'Food delivery',
+    mandate: 'M_FOOD',
+    instructions: 'Up to ₹2000 a week on food delivery from SpiceRoute Kitchen and Biryani Lane. Max ₹800 per order. Valid for 2 months.',
+    form: Object.freeze({ merchants: ['spiceroute', 'biryanilane'], categories: ['food_delivery'], perOrderCap: '800', periodAmount: '2000', periodKind: 'week', askAbove: '', blockedWeekdays: [], autoApproveIrreversible: false, durationDays: '60' }),
+  },
+  {
+    id: 'recharge',
+    label: 'Mobile recharge',
+    mandate: 'M_RECHARGE_AUTO',
+    instructions: 'One mobile recharge a month from TeleTop, up to ₹799. Go ahead without asking me. Valid for 2 months.',
+    form: Object.freeze({ merchants: ['teletop'], categories: ['mobile_recharge'], perOrderCap: '799', periodAmount: '799', periodKind: 'month', askAbove: '', blockedWeekdays: [], autoApproveIrreversible: true, durationDays: '60' }),
+  },
+]);
+
+export const presetById = (id) => PRESETS.find((p) => p.id === id) ?? null;
+
+/** Two forms hold the same rules (the order of shops and days does not matter). */
+export function sameForm(a, b) {
+  if (!a || !b) return false;
+  const norm = (f) => JSON.stringify(Object.keys(DEFAULT_FORM).map((k) => (Array.isArray(f[k]) ? [...f[k]].sort() : f[k])));
+  return norm(a) === norm(b);
+}
+
+/** The preset a sample request was written for (the test file names a mandate, or uses its default). */
+export function presetForScenario(scenario, defaults) {
+  const mandate = scenario.mandate ?? defaults.mandate;
+  return PRESETS.find((p) => p.mandate === mandate) ?? null;
+}
 
 export const SHOPS = Object.entries(CATALOGUE.merchants)
   .filter(([, m]) => m.verified === true)
@@ -223,10 +260,132 @@ export function rulerModel({ fences, amount = null }) {
 
 /** The sentence for one limit in the ruler's legend. */
 export function fenceText(f, amount) {
-  const who = f.who === 'bank' ? 'held by the bank, checked again by this app' : 'checked by this app';
-  let main = `${f.label}: ${formatRupees(f.value)}`;
+  const who = f.who === 'bank' ? 'Held by the bank, and checked again by Reins.' : 'Checked by Reins only.';
+  let main = `${f.label}: ${formatRupees(f.value)}.`;
   if (amount !== null && f.crossed) {
-    main += f.kind === 'ask' ? '. This order is above it, so you are asked.' : `. This order is ${formatRupees(amount - f.value)} over.`;
+    main += f.kind === 'ask' ? ' This order is above it, so you are asked.' : ` This order is ${formatRupees(amount - f.value)} over.`;
   }
   return { main, who };
+}
+
+// ---------------------------------------------------------------- receipt slips
+
+export const BUILD_ERROR_TEXT = {
+  NO_ITEMS: 'The assistant did not choose any items.',
+  TOO_MANY_LINES: 'The assistant listed more than 20 different items.',
+  UNKNOWN_SKU: 'The assistant named an item that is not in the shop catalogue.',
+  BAD_QTY: 'An item had a quantity that is not a whole number from 1 to 99.',
+  MIXED_MERCHANTS: 'The items came from more than one shop, and one order is paid to one shop.',
+};
+
+const STAMP = {
+  paid: { text: 'Paid', tone: 'ok' },
+  refunded: { text: 'Refunded', tone: 'quiet' },
+  awaiting_approval: { text: 'Needs your OK', tone: 'ask' },
+  suggested: { text: 'Suggested', tone: 'stamp' },
+  blocked: { text: 'Blocked', tone: 'block' },
+  blocked_on_approval: { text: 'Blocked', tone: 'block' },
+  declined: { text: 'Declined', tone: 'quiet' },
+  dismissed: { text: 'Dismissed', tone: 'quiet' },
+  not_built: { text: 'Not an order', tone: 'block' },
+};
+
+/**
+ * Whether a paid order can still be undone, and the minutes left, by the same
+ * test the engine applies: it refuses only when MORE than the window has passed.
+ * @returns {{open: boolean, minutesLeft: number, windowMin: number}|null} null when the order cannot be undone at all
+ */
+export function undoStatus(entry, ledger, now) {
+  const order = ledger.find((o) => o.id === entry.orderId);
+  const u = entry.decision?.figures?.undo;
+  if (!order || !u || !u.reversible) return null;
+  const left = u.windowMin * MINUTE_MS - (now - order.ts);
+  return { open: left >= 0, minutesLeft: left <= 0 ? 0 : Math.ceil(left / MINUTE_MS), windowMin: u.windowMin };
+}
+
+/**
+ * Everything a receipt slip shows for one entry in the feed, worked out from
+ * what the engine decided. The screen only draws this. Words that carry a
+ * rupee amount come from the engine's own receipt or from the order's lines.
+ */
+export function slipModel(entry, { ledger, now }) {
+  const stamp = STAMP[entry.status] ?? { text: entry.status, tone: 'quiet' };
+  const items = entry.proposal ? entry.proposal.items : null;
+  const base = { stamp, items, total: entry.proposal ? entry.proposal.amount : null, figures: entry.decision?.figures ?? null, undo: null, notes: entry.notes ?? [] };
+
+  if (entry.status === 'not_built') {
+    return { ...base, headline: 'No order was made', lines: [...entry.errors.map((c) => BUILD_ERROR_TEXT[c] ?? `The order could not be read (${c}).`), 'Nothing was checked or paid.'], actions: [] };
+  }
+
+  const figures = entry.decision?.figures;
+  const shop = figures ? figures.merchantName : null;
+  const amount = entry.proposal ? formatRupees(entry.proposal.amount) : null;
+
+  if (entry.status === 'refunded') {
+    const lines = ['You undid this order inside its undo window.', 'It no longer counts toward your spending limit.', 'The bank’s payment block is not restored in this simulation.'];
+    return { ...base, headline: `Refunded ${amount} from ${shop}`, lines, actions: [] };
+  }
+  if (entry.status === 'declined' || entry.status === 'dismissed') {
+    const verb = entry.status === 'declined' ? 'Declined' : 'Dismissed';
+    return { ...base, headline: `${verb}: ${amount} at ${shop}`, lines: ['No money moved.'], actions: [] };
+  }
+
+  const receipt = buildReceipt(entry.decision, { approved: entry.approved });
+  const model = { ...base, headline: receipt.headline, lines: receipt.lines, actions: receipt.actions };
+  if (entry.status === 'paid') {
+    model.undo = undoStatus(entry, ledger, now);
+    model.actions = model.undo && model.undo.open ? ['undo'] : [];
+  }
+  return model;
+}
+
+
+// ---------------------------------------------------------------- statement
+
+/** How much of the period limit is spent now, counted the way the engine counts it. */
+export function periodStatus(mandate, ledger, now) {
+  if (!mandate || !mandate.periodCap) return null;
+  const { period, amount: cap } = mandate.periodCap;
+  const window = windowFor(period, now);
+  const spent = ledger.filter((o) => o.status === 'paid' && o.ts >= window.start && o.ts <= window.end).reduce((total, o) => total + o.amount, 0);
+  return { period, cap, spent, left: Math.max(0, cap - spent) };
+}
+
+
+// ---------------------------------------------------------------- the promotion gate
+
+const weeksText = (n) => `${n} ${n === 1 ? 'week' : 'weeks'}`;
+
+/**
+ * The gate's failures in plain words. `labels` maps a segment id to its name.
+ * @param {{from: string, weeks: number, gate: object, labels: {[id: string]: string}}} input
+ * @returns {{code: string, segment?: string, text: string}[]}
+ */
+export function gateReasons({ from, weeks, gate, labels }) {
+  const step = STEPS[from] ?? null;
+  const line = Math.round(DEFAULT_THRESHOLD * 100);
+  return gate.failures.map((f) => {
+    const seg = f.segment ? gate.bySegment[f.segment] : null;
+    const name = f.segment ? labels[f.segment] ?? f.segment : null;
+    switch (f.code) {
+      case 'TOO_SHORT': return { ...f, text: `Only ${weeksText(weeks)} of record. Moving up from “${RUNG_LABELS[from]}” needs at least ${weeksText(step.minWeeks)}.` };
+      case 'NO_CONSENT': return { ...f, text: `Moving up to “${RUNG_LABELS[step.to]}” needs your consent. Tick the box.` };
+      case 'INSUFFICIENT_DATA': return { ...f, text: `${name}: only ${seg.events} orders so far. At least ${DEFAULT_MIN_EVENTS} are needed before this group can be judged.` };
+      case 'SEGMENT_OVER_THRESHOLD': return { ...f, text: `${name}: people overrode the assistant on ${percent(seg.rate)} of orders. The line is ${line}%.` };
+      case 'OVERALL_OVER_THRESHOLD': return { ...f, text: gate.overall.rate === null ? 'There are no orders in the record yet.' : `Overall, people overrode the assistant on ${percent(gate.overall.rate)} of orders. The line is ${line}%.` };
+      case 'TOP_RUNG': return { ...f, text: 'The assistant is already at the top rung. There is nothing higher.' };
+      default: return { ...f, text: `The check ${f.code} did not pass.` };
+    }
+  });
+}
+
+/**
+ * The case the gate exists for: the overall rate is under the line and one
+ * group is over it. Returns a sentence, or null when that is not what happened.
+ */
+export function hiddenGapText({ gate, labels }) {
+  const bad = gate.failures.filter((f) => f.code === 'SEGMENT_OVER_THRESHOLD');
+  if (!bad.length || gate.overall.rate === null || !(gate.overall.rate < DEFAULT_THRESHOLD)) return null;
+  const names = bad.map((f) => `${labels[f.segment] ?? f.segment} (${percent(gate.bySegment[f.segment].rate)})`);
+  return `Overall, only ${percent(gate.overall.rate)} of orders were overridden, under the ${Math.round(DEFAULT_THRESHOLD * 100)}% line. ${joinList(names)} ${bad.length === 1 ? 'is' : 'are'} over it. The average hides the problem, so the gate says no.`;
 }

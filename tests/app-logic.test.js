@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import {
   DEFAULT_FORM, DEFAULT_INSTRUCTIONS, SHOPS, KINDS, formToRaw, parseAmountText, readerToForm, mandateClauses,
   defaultClock, nextWeekdayAt10, scriptedItems, niceCeil, rulerModel, fencesFromFigures, fencesFromMandate, fenceText, joinList,
+  slipModel, undoStatus, BUILD_ERROR_TEXT, PRESETS, presetById, presetForScenario, periodStatus, sameForm, gateReasons, hiddenGapText,
 } from '../public/js/logic.js';
 import { normalizeMandate } from '../public/js/core/mandate.js';
 import { coerceParsed } from '../public/js/core/coerce.js';
@@ -219,10 +220,10 @@ test('the ruler works with no order, no limits, or a zero limit', () => {
 test('a legend line says who holds a limit and how far over the order is', () => {
   const m = rulerModel({ amount: 1800, fences: [{ key: 'order', label: 'Most for one order', value: 1500, who: 'app', kind: 'limit' }, { key: 'ask', label: 'Ask me above', value: 1000, who: 'app', kind: 'ask' }] });
   const byKey = Object.fromEntries(m.fences.map((f) => [f.key, f]));
-  assert.deepEqual(fenceText(byKey.order, 1800), { main: 'Most for one order: ₹1,500. This order is ₹300 over.', who: 'checked by this app' });
+  assert.deepEqual(fenceText(byKey.order, 1800), { main: 'Most for one order: ₹1,500. This order is ₹300 over.', who: 'Checked by Reins only.' });
   assert.match(fenceText(byKey.ask, 1800).main, /you are asked/);
   const bank = { key: 'rail', label: 'Bank block', value: 10000, who: 'bank', kind: 'limit', crossed: false };
-  assert.equal(fenceText(bank, 1800).who, 'held by the bank, checked again by this app');
+  assert.equal(fenceText(bank, 1800).who, 'Held by the bank, and checked again by Reins.');
 });
 
 test('fences come from the engine figures and from the mandate, with the bank kept apart from the app', () => {
@@ -285,9 +286,29 @@ test('rules from the default form can be activated, and the compile step reports
   const c = store.compiled();
   assert.equal(c.blocks.length, 2);
   assert.equal(c.bank.maxActiveBlocks, 2);
+  // The bank's setting is part of what is made when the rules are activated; changing it later changes nothing until then.
   store.setBankSlots(1);
+  assert.equal(store.compiled().blocks.length, 2);
+  assert.equal(store.draft().changed, true);
+  assert.equal(store.draft().compiled.blocks.length, 1);
+  store.activate();
   assert.equal(store.compiled().blocks.length, 1);
   assert.ok(store.compiled().warnings.some((w) => w.code === 'BANK_BLOCK_LIMIT'));
+  assert.equal(store.draft().changed, false);
+});
+
+test('the draft knows when the form differs from the active rules, and when it is not valid', async () => {
+  const store = await freshStore();
+  assert.equal(store.draft().changed, true, 'nothing is active yet');
+  store.activate();
+  assert.equal(store.draft().changed, false);
+  store.setForm({ askAbove: '900' });
+  assert.equal(store.draft().changed, true);
+  store.setForm({ askAbove: '1000' });
+  assert.equal(store.draft().changed, false);
+  store.setForm({ periodAmount: 'x' });
+  assert.equal(store.draft().check.ok, false);
+  assert.equal(store.draft().compiled, null);
 });
 
 test('rules with an error are not activated, and the old rules stay', async () => {
@@ -698,4 +719,290 @@ test('start again wipes the rules, the feed and the ledger, and the clock return
   assert.equal(s.ledgerState.ledger.length, 0);
   assert.ok(!['sat', 'sun'].includes(istWeekday(s.clockMs)));
   assert.equal(istDate(s.clockMs) >= '2026-01-01', true);
+});
+
+// ---- receipt slips
+
+function slipFor(store, entry) {
+  const s = store.get();
+  return slipModel(s.feed.find((e) => e.id === entry.id), { ledger: s.ledgerState.ledger, now: s.clockMs });
+}
+
+test('a slip for a suggestion says so, offers approve and dismiss, and moves no money', async () => {
+  const store = await freshStore();
+  store.activate();
+  const e = ASK(store, 'atta and milk', ['FB-ATTA', 1], ['FB-MILK', 1]);
+  const m = slipFor(store, e);
+  assert.deepEqual(m.stamp, { text: 'Suggested', tone: 'stamp' });
+  assert.equal(m.headline, 'Suggestion: ₹341 at FreshBasket');
+  assert.deepEqual(m.actions, ['approve', 'dismiss']);
+  assert.equal(m.total, 341);
+  assert.deepEqual(m.items.map((i) => [i.sku, i.qty, i.lineTotal]), [['FB-ATTA', 1, 285], ['FB-MILK', 1, 56]]);
+  assert.ok(m.lines.includes('No money moved. This is a suggestion only.'));
+});
+
+test('a slip for a paid order counts the undo minutes down as the clock moves, then closes', async () => {
+  const store = await freshStore();
+  store.activate();
+  const e = ASK(store, 'milk', ['FB-MILK', 1]);
+  store.approve(e.id);
+  let m = slipFor(store, e);
+  assert.deepEqual(m.stamp, { text: 'Paid', tone: 'ok' });
+  assert.equal(m.headline, 'Paid ₹56 to FreshBasket');
+  assert.deepEqual(m.undo, { minutesLeft: 15, windowMin: 15, open: true });
+  assert.deepEqual(m.actions, ['undo']);
+  store.advanceClock(4 * MINUTE_MS + 1000);
+  assert.equal(slipFor(store, e).undo.minutesLeft, 11, 'part of a minute counts as a minute left');
+  store.advanceClock(11 * MINUTE_MS);
+  m = slipFor(store, e);
+  assert.deepEqual(m.undo, { minutesLeft: 0, windowMin: 15, open: false });
+  assert.deepEqual(m.actions, []);
+  assert.equal(store.undo(e.id).ok, false, 'the screen and the engine agree the window is closed');
+});
+
+test('the undo button and the engine agree to the second at the edge of the window', async () => {
+  const store = await freshStore();
+  store.activate();
+  const e = ASK(store, 'milk', ['FB-MILK', 1]);
+  store.approve(e.id);
+  store.advanceClock(15 * MINUTE_MS); // exactly at the edge: the engine still allows it
+  assert.deepEqual(slipFor(store, e).undo, { open: true, minutesLeft: 0, windowMin: 15 });
+  assert.equal(slipFor(store, e).actions[0], 'undo');
+  assert.equal(store.undo(e.id).ok, true);
+  const f = ASK(store, 'again', ['FB-EGGS', 1]);
+  store.approve(f.id);
+  store.advanceClock(15 * MINUTE_MS + 1); // one millisecond later: closed on both sides
+  assert.equal(slipFor(store, f).undo.open, false);
+  assert.deepEqual(slipFor(store, f).actions, []);
+  assert.equal(store.undo(f.id).ok, false);
+});
+
+test('a recharge cannot be undone, so its slip offers no undo and says so', async () => {
+  const store = await freshStore();
+  store.setForm({ merchants: ['teletop'], categories: ['mobile_recharge'], perOrderCap: '1000', periodAmount: '1000', periodKind: 'month', askAbove: '', blockedWeekdays: [], autoApproveIrreversible: true, durationDays: '30' });
+  assert.equal(store.activate().ok, true);
+  climbTo(store, 'bounded');
+  const e = ASK(store, 'recharge', ['TT-399', 1]);
+  assert.equal(e.status, 'paid');
+  const m = slipFor(store, e);
+  assert.deepEqual(m.actions, []);
+  assert.equal(m.undo, null);
+  assert.ok(m.lines.includes('This cannot be undone.'));
+  assert.equal(store.undo(e.id).ok, false);
+});
+
+test('a refunded slip says what it freed and what it did not give back', async () => {
+  const store = await freshStore();
+  store.activate();
+  const e = ASK(store, 'milk', ['FB-MILK', 2]);
+  store.approve(e.id);
+  store.undo(e.id);
+  const m = slipFor(store, e);
+  assert.deepEqual(m.stamp, { text: 'Refunded', tone: 'quiet' });
+  assert.equal(m.headline, 'Refunded ₹112 from FreshBasket');
+  assert.ok(m.lines.some((l) => /payment block is not restored/.test(l)));
+  assert.deepEqual(m.actions, []);
+});
+
+test('slips for waiting, blocked, declined and unbuildable orders', async () => {
+  const store = await freshStore();
+  store.activate();
+  climbTo(store, 'approve_each');
+  const waiting = ASK(store, 'milk', ['FB-MILK', 1]);
+  assert.deepEqual(slipFor(store, waiting).stamp, { text: 'Needs your OK', tone: 'ask' });
+  assert.deepEqual(slipFor(store, waiting).actions, ['approve', 'decline']);
+  store.decline(waiting.id);
+  const declined = slipFor(store, waiting);
+  assert.deepEqual(declined.stamp, { text: 'Declined', tone: 'quiet' });
+  assert.equal(declined.headline, 'Declined: ₹56 at FreshBasket');
+  assert.deepEqual(declined.actions, []);
+
+  const fake = ASK(store, 'fake', ['FK-ATTA', 1]);
+  const blocked = slipFor(store, fake);
+  assert.deepEqual(blocked.stamp, { text: 'Blocked', tone: 'block' });
+  assert.match(blocked.headline, /^Blocked/);
+  assert.deepEqual(blocked.actions, []);
+
+  const mixed = ASK(store, 'mixed', ['FB-MILK', 1], ['QM-MILK', 1]);
+  const none = slipFor(store, mixed);
+  assert.deepEqual(none.stamp, { text: 'Not an order', tone: 'block' });
+  assert.equal(none.headline, 'No order was made');
+  assert.ok(none.lines.includes(BUILD_ERROR_TEXT.MIXED_MERCHANTS));
+  assert.ok(none.lines.includes('Nothing was checked or paid.'));
+  assert.equal(none.items, null);
+});
+
+test('every way an order can fail to build has a plain-language line', () => {
+  for (const code of ['NO_ITEMS', 'TOO_MANY_LINES', 'UNKNOWN_SKU', 'BAD_QTY', 'MIXED_MERCHANTS']) assert.ok(BUILD_ERROR_TEXT[code].endsWith('.'), code);
+});
+
+test('a slip never invents a rupee amount: every figure in its words is one the engine or the order produced', async () => {
+  const store = await freshStore();
+  store.activate();
+  climbTo(store, 'bounded');
+  const entries = [
+    ASK(store, 'a', ['FB-MILK', 2]),
+    ASK(store, 'b', ['FB-RICE', 2]),
+    ASK(store, 'c', ['FB-RICE', 3]),
+    ASK(store, 'd', ['FK-ATTA', 1]),
+  ];
+  for (const e of entries) {
+    const m = slipFor(store, e);
+    const allowed = new Set();
+    const f = e.decision.figures;
+    if (f) {
+      allowed.add(f.amount); allowed.add(f.askAbove); allowed.add(f.perOrderCap);
+      for (const o of [f.period, f.rail]) for (const v of Object.values(o)) if (typeof v === 'number') allowed.add(v);
+    }
+    const text = [m.headline, ...m.lines].join(' ');
+    for (const match of text.matchAll(/₹([\d,]+)/g)) {
+      const n = Number(match[1].replace(/,/g, ''));
+      assert.ok(allowed.has(n), `${e.id}: ₹${n} in "${text}" is not from the engine's figures`);
+    }
+  }
+});
+
+// ---- presets and the period figure
+
+test('each rule preset is the same mandate as the labelled test case it is named after', () => {
+  for (const p of PRESETS) {
+    const r = normalizeMandate(formToRaw(p.form), { today: shared.today, catalogue: CATALOGUE });
+    assert.equal(r.ok, true, p.id);
+    const want = shared.mandates[p.mandate];
+    for (const key of ['merchants', 'categories', 'perOrderCap', 'periodCap', 'blockedWeekdays', 'askAbove', 'autoApproveIrreversible', 'durationDays']) {
+      assert.deepEqual(r.mandate[key], want[key], `${p.id}.${key}`);
+    }
+  }
+  assert.equal(presetById('nope'), null);
+});
+
+test('every sample request has a preset to run under, and A10 is the recharge one', () => {
+  const defaults = read('agent-scenarios').defaults;
+  for (const s of scenarios) assert.ok(presetForScenario(s, defaults), s.id);
+  assert.equal(presetForScenario(scenario('A10'), defaults).id, 'recharge');
+  assert.equal(presetForScenario(scenario('A01'), defaults).id, 'groceries');
+});
+
+test('applying a preset fills the form and the sentences, clears open items, and activates nothing', async () => {
+  const store = await freshStore();
+  store.applyReader(readerToForm(coerceParsed({ merchants: ['Zepto'] }, CATALOGUE)));
+  assert.equal(store.get().unresolved.length, 1);
+  assert.equal(store.applyPreset('recharge'), true);
+  assert.deepEqual(store.get().form.merchants, ['teletop']);
+  assert.match(store.get().instructions, /recharge/i);
+  assert.equal(store.get().unresolved.length, 0);
+  assert.equal(store.get().mandate, null);
+  assert.equal(store.applyPreset('nope'), false);
+  // And the scripted careful agent can then buy the recharge the sample asks for.
+  assert.equal(store.activate().ok, true);
+  climbTo(store, 'bounded');
+  const a10 = scenario('A10');
+  const e = store.proposeOrder({ request: a10.request, output: { items: scriptedItems(a10, 'careful') }, source: 'careful', scenario: a10 });
+  assert.equal(e.status, 'paid');
+});
+
+test('the period figure counts paid orders in the current window, and a refund frees it', async () => {
+  const store = await freshStore();
+  store.activate();
+  assert.deepEqual(periodStatus(store.get().mandate, store.get().ledgerState.ledger, store.get().clockMs), { period: 'week', cap: 3000, spent: 0, left: 3000 });
+  const e = ASK(store, 'veg', ['FB-VEG', 2]);
+  store.approve(e.id);
+  const s = store.get();
+  assert.deepEqual(periodStatus(s.mandate, s.ledgerState.ledger, s.clockMs), { period: 'week', cap: 3000, spent: 798, left: 2202 });
+  store.undo(e.id);
+  const t = store.get();
+  assert.equal(periodStatus(t.mandate, t.ledgerState.ledger, t.clockMs).spent, 0);
+  // Next week the window has moved on.
+  assert.equal(periodStatus(t.mandate, t.ledgerState.ledger, t.clockMs + 8 * DAY).spent, 0);
+  assert.equal(periodStatus({ ...t.mandate, periodCap: null }, [], t.clockMs), null);
+  assert.equal(periodStatus(null, [], t.clockMs), null);
+});
+
+test('the period figure on screen is the one the engine uses to stop an order', async () => {
+  const store = await freshStore();
+  store.activate();
+  climbTo(store, 'bounded');
+  for (let i = 0; i < 3; i += 1) { store.advanceClock(2 * HOUR); assert.equal(ASK(store, 'veg', ['FB-VEG', 2]).status, 'paid'); }
+  const s = store.get();
+  const shown = periodStatus(s.mandate, s.ledgerState.ledger, s.clockMs);
+  store.advanceClock(2 * HOUR);
+  const blocked = ASK(store, 'veg', ['FB-VEG', 2]);
+  const t = store.get();
+  assert.equal(blocked.decision.figures.period.spentBefore, periodStatus(t.mandate, t.ledgerState.ledger, t.clockMs).spent);
+  assert.equal(shown.spent, 2394);
+});
+
+test('two forms are the same rules whatever order the shops and days were ticked in', () => {
+  assert.equal(sameForm(DEFAULT_FORM, { ...DEFAULT_FORM, merchants: ['quickmart', 'freshbasket'], blockedWeekdays: ['sun', 'sat'] }), true);
+  assert.equal(sameForm(DEFAULT_FORM, { ...DEFAULT_FORM, askAbove: '900' }), false);
+  assert.equal(sameForm(DEFAULT_FORM, { ...DEFAULT_FORM, merchants: ['freshbasket'] }), false);
+  assert.equal(sameForm(DEFAULT_FORM, null), false);
+  assert.equal(sameForm(presetById('food').form, presetById('food').form), true);
+});
+
+// ---- the promotion gate in words
+
+const LABELS = { single: 'Single adult', couple: 'Couple', family: 'Family (multi-cart)', new_user: 'New user' };
+
+test('the gate says why in plain words, with the figures the gate itself used', async () => {
+  const store = await freshStore();
+  store.setEvidence({ set: 'hidden_gap', weeks: 3 });
+  const { gate } = store.evidence();
+  const reasons = gateReasons({ from: 'suggest', weeks: 3, gate, labels: LABELS });
+  const byCode = Object.fromEntries(reasons.map((r) => [r.code + (r.segment ? `:${r.segment}` : ''), r.text]));
+  assert.equal(byCode.TOO_SHORT, 'Only 3 weeks of record. Moving up from “Suggest only” needs at least 4 weeks.');
+  const family = gate.bySegment.family;
+  assert.equal(byCode['SEGMENT_OVER_THRESHOLD:family'], `Family (multi-cart): people overrode the assistant on ${(family.rate * 100).toFixed(1).replace(/\.0$/, '')}% of orders. The line is 10%.`);
+  assert.equal(reasons.length, gate.failures.length, 'one sentence for every failure, none dropped');
+  assert.ok(reasons.every((r) => r.text.length > 20));
+});
+
+test('the gate tells the hidden-gap story only when the average really does hide a group', async () => {
+  const store = await freshStore();
+  store.setEvidence({ set: 'hidden_gap', weeks: 8 });
+  const gap = store.evidence().gate;
+  const text = hiddenGapText({ gate: gap, labels: LABELS });
+  assert.match(text, /^Overall, only \d+(\.\d)?% of orders were overridden, under the 10% line\. Family \(multi-cart\) \(\d+(\.\d)?%\) is over it\./);
+  store.setEvidence({ set: 'healthy', weeks: 8 });
+  assert.equal(hiddenGapText({ gate: store.evidence().gate, labels: LABELS }), null, 'a healthy record has no hidden gap');
+  store.setEvidence({ set: 'hidden_gap', weeks: 3 });
+  // Too short is a different failure: the family group is not what stops it, so the story must still only name groups that are over the line.
+  const short = hiddenGapText({ gate: store.evidence().gate, labels: LABELS });
+  assert.ok(short === null || /is over it/.test(short));
+});
+
+test('every kind of gate failure has a sentence, including consent and the top rung', async () => {
+  const store = await freshStore();
+  climbTo(store, 'approve_each');
+  store.setEvidence({ set: 'healthy', weeks: 5, consent: false });
+  const reasons = gateReasons({ from: 'approve_each', weeks: 5, gate: store.evidence().gate, labels: LABELS });
+  assert.ok(reasons.some((r) => r.code === 'NO_CONSENT' && /Act within limits/.test(r.text)));
+  assert.ok(reasons.some((r) => r.code === 'TOO_SHORT' && /at least 8 weeks/.test(r.text)));
+  store.setEvidence({ set: 'healthy', weeks: 8, consent: true });
+  assert.equal(store.promote().allowed, true);
+  const top = gateReasons({ from: 'bounded', weeks: 8, gate: store.evidence().gate, labels: LABELS });
+  assert.deepEqual(top.map((r) => r.code), ['TOP_RUNG']);
+  const none = gateReasons({ from: 'suggest', weeks: 1, gate: { failures: [{ code: 'OVERALL_OVER_THRESHOLD' }], bySegment: {}, overall: { rate: null } }, labels: LABELS });
+  assert.equal(none[0].text, 'There are no orders in the record yet.');
+  const insufficient = gateReasons({ from: 'suggest', weeks: 4, gate: { failures: [{ code: 'INSUFFICIENT_DATA', segment: 'family' }], bySegment: { family: { events: 12, overrides: 1, rate: 1 / 12 } }, overall: { rate: 0.05 } }, labels: LABELS });
+  assert.equal(insufficient[0].text, 'Family (multi-cart): only 12 orders so far. At least 50 are needed before this group can be judged.');
+});
+
+test('taking freedom back needs no evidence and works at once, one rung at a time', async () => {
+  const store = await freshStore();
+  assert.equal(store.stepDown(), false, 'there is nothing below the first rung');
+  climbTo(store, 'bounded');
+  assert.equal(store.stepDown(), true);
+  assert.equal(store.get().rung, 'approve_each');
+  assert.equal(store.get().evidence.consent, false);
+  assert.equal(store.stepDown(), true);
+  assert.equal(store.get().rung, 'suggest');
+  assert.equal(store.stepDown(), false);
+  // And what the rung allows follows at once: an order that was paid at the top rung now waits.
+  store.activate();
+  climbTo(store, 'bounded');
+  assert.equal(ASK(store, 'a', ['FB-MILK', 1]).status, 'paid');
+  store.stepDown();
+  store.advanceClock(2 * HOUR);
+  assert.equal(ASK(store, 'b', ['FB-MILK', 1]).status, 'awaiting_approval');
 });
