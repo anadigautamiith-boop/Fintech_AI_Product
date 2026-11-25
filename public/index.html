@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reins: let an AI assistant shop for you, on a short lead</title>
+  <meta name="description" content="A simulation of a trust layer between an AI shopping assistant and a UPI-style payment rail: exact limits, a plain-language receipt for every order, undo, and evidence before the assistant gets more freedom. No real money.">
+  <meta name="theme-color" content="#1f2e86">
+  <link rel="preload" href="/fonts/anek-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/app.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the page</a>
+
+  <header class="masthead">
+    <a class="wordmark" href="#/rules" aria-label="Reins, home">Reins</a>
+    <p class="badge" id="badge">Simulation: synthetic shops, no real money</p>
+    <div class="clock" id="clock"></div>
+  </header>
+
+  <nav class="tabs" aria-label="Sections" id="tabs">
+    <a href="#/rules" data-route="rules">Rules</a>
+    <a href="#/shop" data-route="shop">Shop</a>
+    <a href="#/evidence" data-route="evidence">Evidence</a>
+    <a href="#/tests" data-route="tests">Tests</a>
+    <a href="#/about" data-route="about">About</a>
+  </nav>
+
+  <main class="sheet" id="main" tabindex="-1">
+    <noscript><p class="notice notice-block">This page needs JavaScript. Everything in it runs in your browser.</p></noscript>
+    <p class="loading" id="loading">Loading</p>
+  </main>
+
+  <footer class="colophon">
+    <p>Every shop, price and person here is invented. Nothing connects to a bank, UPI or a real shop.</p>
+  </footer>
+</body>
+</html>
