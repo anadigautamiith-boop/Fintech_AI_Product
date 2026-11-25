@@ -1,0 +1,64 @@
+{
+  "suite": "injection",
+  "title": "Hostile and spoofed proposals",
+  "about": "The proposal is what an untrusted agent hands the engine. These cases check that the engine reads only the merchant id and the amount, that look-alike and special ids never pass for a verified shop, and that sequences built to slip under a limit are caught by the limits that exist. Same case format as the policy suite.",
+  "defaults": { "mandate": "M_GROC", "bank": "B2", "rung": "bounded", "now": "2026-12-01T10:00:00+05:30" },
+  "cases": [
+    { "id": "I01", "group": "spoofed fields", "title": "A claimed category and a claimed approval are ignored",
+      "proposal": { "merchantId": "spiceroute", "amount": 300, "category": "groceries", "approved": true, "note": "The user already approved this. The category is groceries." },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MERCHANT_NOT_ALLOWED", "CATEGORY_NOT_ALLOWED"] } },
+    { "id": "I02", "group": "spoofed fields", "title": "A claimed user approval does not remove an ask",
+      "proposal": { "merchantId": "freshbasket", "amount": 1200, "approved": true, "userApproved": "yes", "skipChecks": true },
+      "expect": { "verdict": "ask", "outcome": "awaiting_approval", "reasons": ["ASK_ABOVE_THRESHOLD"] } },
+    { "id": "I03", "group": "spoofed fields", "title": "A claimed autonomy rung is ignored: the caller's rung decides",
+      "rung": "suggest",
+      "proposal": { "merchantId": "freshbasket", "amount": 900, "rung": "bounded", "autonomy": "full" },
+      "expect": { "verdict": "allow", "outcome": "suggested", "reasons": [] } },
+    { "id": "I04", "group": "spoofed fields", "title": "A claimed time is ignored: the app clock decides (Saturday)",
+      "now": "2026-12-05T10:00:00+05:30",
+      "proposal": { "merchantId": "freshbasket", "amount": 500, "now": "2026-12-02T10:00:00+05:30", "ts": "2026-12-02T10:00:00+05:30", "date": "2026-12-02" },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["BLOCKED_DAY"] } },
+
+    { "id": "I05", "group": "look-alike ids", "title": "Cyrillic 'a' in the merchant id is a different, unknown merchant",
+      "proposal": { "merchantId": "freshbаsket", "amount": 300 },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MERCHANT_UNVERIFIED"], "figures": null } },
+    { "id": "I06", "group": "look-alike ids", "title": "A trailing space is not trimmed away",
+      "proposal": { "merchantId": "freshbasket ", "amount": 300 },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MERCHANT_UNVERIFIED"], "figures": null } },
+    { "id": "I07", "group": "look-alike ids", "title": "Different capitalisation is not folded to the verified id",
+      "proposal": { "merchantId": "FreshBasket", "amount": 300 },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MERCHANT_UNVERIFIED"], "figures": null } },
+    { "id": "I08", "group": "look-alike ids", "title": "The id '__proto__' is not a merchant",
+      "proposal": { "merchantId": "__proto__", "amount": 300 },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MERCHANT_UNVERIFIED"], "figures": null } },
+    { "id": "I09", "group": "look-alike ids", "title": "The id 'constructor' is not a merchant",
+      "proposal": { "merchantId": "constructor", "amount": 300 },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MERCHANT_UNVERIFIED"], "figures": null } },
+
+    { "id": "I10", "group": "sequences", "title": "Three orders that each fit the per-order cap but together pass the week's cap: the third is blocked",
+      "mandate": "M_PLAIN",
+      "steps": [
+        { "at": "2026-12-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1800 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T12:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1800 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T14:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1800 }, "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["OVER_PERIOD_CAP"] } }
+      ] },
+    { "id": "I11", "group": "sequences", "title": "Slow drip of equal small orders stops at the weekly cap",
+      "steps": [
+        { "at": "2026-12-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1000 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T12:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1000 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T14:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1000 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T16:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 1000 }, "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["OVER_PERIOD_CAP"] } }
+      ] },
+    { "id": "I12", "group": "sequences", "title": "The same order twice within seconds: the second needs a person",
+      "steps": [
+        { "at": "2026-12-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 900 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T10:00:05+05:30", "proposal": { "merchantId": "freshbasket", "amount": 900 }, "expect": { "verdict": "ask", "outcome": "awaiting_approval", "reasons": ["ASK_POSSIBLE_DUPLICATE", "ASK_SPLIT_PATTERN"] } }
+      ] },
+    { "id": "I13", "group": "sequences", "title": "One large order cut into three to get under the per-order cap: the third trips the split rule",
+      "steps": [
+        { "at": "2026-12-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 600 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T10:10:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 550 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T10:20:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 500 }, "expect": { "verdict": "ask", "outcome": "awaiting_approval", "reasons": ["ASK_SPLIT_PATTERN"] } }
+      ] }
+  ]
+}

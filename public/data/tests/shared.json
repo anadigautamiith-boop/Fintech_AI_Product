@@ -1,0 +1,90 @@
+{
+  "_comment": "Shared fixtures. Mandates are raw inputs; the runners normalise them with `today`. Amounts are whole rupees. All times are IST (+05:30). 2026-11-30 is a Monday.",
+  "today": "2026-11-30",
+  "banks": {
+    "B1": { "maxActiveBlocks": 1 },
+    "B2": { "maxActiveBlocks": 2 }
+  },
+  "mandates": {
+    "M_GROC": {
+      "merchants": ["freshbasket", "quickmart"],
+      "categories": ["groceries"],
+      "perOrderCap": 1500,
+      "periodCap": { "amount": 3000, "period": "week" },
+      "blockedWeekdays": ["sat", "sun"],
+      "askAbove": 1000,
+      "autoApproveIrreversible": false,
+      "durationDays": 60
+    },
+    "M_PLAIN": {
+      "merchants": ["freshbasket"],
+      "categories": null,
+      "perOrderCap": 5000,
+      "periodCap": { "amount": 4000, "period": "week" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": false,
+      "durationDays": 60
+    },
+    "M_FOOD": {
+      "merchants": ["spiceroute", "biryanilane"],
+      "categories": ["food_delivery"],
+      "perOrderCap": 800,
+      "periodCap": { "amount": 2000, "period": "week" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": false,
+      "durationDays": 60
+    },
+    "M_RECHARGE_AUTO": {
+      "merchants": ["teletop"],
+      "categories": ["mobile_recharge"],
+      "perOrderCap": 799,
+      "periodCap": { "amount": 799, "period": "month" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": true,
+      "durationDays": 60
+    },
+    "M_RECHARGE_ASK": {
+      "merchants": ["teletop"],
+      "categories": ["mobile_recharge"],
+      "perOrderCap": 799,
+      "periodCap": { "amount": 799, "period": "month" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": false,
+      "durationDays": 60
+    },
+    "M_ANY": {
+      "merchants": null,
+      "categories": ["groceries"],
+      "perOrderCap": 2000,
+      "periodCap": { "amount": 5000, "period": "week" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": false,
+      "durationDays": 30
+    },
+    "M_DAYCAP": {
+      "merchants": ["spiceroute"],
+      "categories": null,
+      "perOrderCap": 500,
+      "periodCap": { "amount": 500, "period": "day" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": false,
+      "durationDays": 30
+    },
+    "M_BAZAAR": {
+      "merchants": ["bazaarhub"],
+      "categories": ["general_merchandise"],
+      "perOrderCap": 1500,
+      "periodCap": { "amount": 3000, "period": "week" },
+      "blockedWeekdays": [],
+      "askAbove": null,
+      "autoApproveIrreversible": false,
+      "durationDays": 60
+    }
+  }
+}

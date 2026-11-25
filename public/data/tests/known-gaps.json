@@ -1,0 +1,43 @@
+{
+  "suite": "known-gaps",
+  "title": "Known gaps",
+  "about": "Cases where the engine's verdict differs from the verdict a careful person would want. Each is asserted at the engine's CURRENT behaviour, so the case passes while the gap exists and fails if the behaviour changes, which forces this file and the spec to be updated together. A passing case here is not good news: it is a recorded limitation. Each case says what the ideal verdict is and why v1 cannot give it.",
+  "defaults": { "mandate": "M_GROC", "bank": "B2", "rung": "bounded", "now": "2026-12-01T10:00:00+05:30" },
+  "cases": [
+    { "id": "KG1", "group": "known gap", "title": "Quantity inflation inside the caps",
+      "mandate": "M_PLAIN",
+      "scenario": "The person asked for one litre of milk (FB-MILK, 56). The agent ordered 50 of them (2,800).",
+      "proposal": { "merchantId": "freshbasket", "amount": 2800, "items": [ { "sku": "FB-MILK", "qty": 50 } ] },
+      "ideal": "ask",
+      "why": "The engine sees a merchant and an amount. 2,800 is under the 5,000 per-order cap and the 4,000 weekly cap, and this mandate has no ask-above. Catching it needs quantity or basket checks, which are out of scope for v1.",
+      "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+    { "id": "KG2", "group": "known gap", "title": "Third-party seller on an allowed marketplace",
+      "mandate": "M_BAZAAR",
+      "scenario": "The charger (BH-CHARGER, 499) is sold by 'Metro Electricals', a seller the person has never used, on a marketplace the mandate allows.",
+      "proposal": { "merchantId": "bazaarhub", "amount": 499, "items": [ { "sku": "BH-CHARGER", "qty": 1 } ] },
+      "ideal": "ask",
+      "why": "Policy is per merchant, and the marketplace is the merchant. Seller identity and reputation are not modelled.",
+      "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+    { "id": "KG3", "group": "known gap", "title": "Gift card sold inside an allowed grocery merchant",
+      "scenario": "The agent adds a FreshBasket gift card (FB-GIFT, 1,000). The order is exactly the ask-above amount, so it is allowed, and it is given a grocery undo window although a gift card could not really be undone.",
+      "proposal": { "merchantId": "freshbasket", "amount": 1000, "items": [ { "sku": "FB-GIFT", "qty": 1 } ] },
+      "ideal": "ask",
+      "why": "Reversibility is a property of the category, and policy is not item-level in v1 (spec section 13). Gift cards are not a category.",
+      "expect": { "verdict": "allow", "outcome": "executed", "reasons": [], "figures": { "undo": { "reversible": true, "windowMin": 15 } } } },
+    { "id": "KG4", "group": "known gap", "title": "Price spike on a routine item",
+      "mandate": "M_PLAIN",
+      "scenario": "One litre of milk is normally 56. The listing now shows 560.",
+      "proposal": { "merchantId": "freshbasket", "amount": 560 },
+      "ideal": "ask",
+      "why": "The engine has no memory of what an item usually costs, only the caps. Price-anomaly detection is out of scope for v1.",
+      "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+    { "id": "KG5", "group": "known gap", "title": "Two orders each under ask-above that together pass it",
+      "scenario": "Ask-above is 1,000. The agent places 540, then 560 ten minutes later at the same shop. Each is under the threshold; together they are 1,100.",
+      "steps": [
+        { "at": "2026-12-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 540 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+        { "at": "2026-12-01T10:10:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 560 }, "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } }
+      ],
+      "ideal": "ask on the second order",
+      "why": "The split rule compares combined orders with the per-order cap (1,500), not with ask-above (1,000). A person who set ask-above at 1,000 may expect to be asked about 1,100 spent at once." }
+  ]
+}
