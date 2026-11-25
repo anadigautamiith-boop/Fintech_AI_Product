@@ -1,3 +1,3 @@
 import { registerSuite } from './helpers.js';
 
-registerSuite('steered');
+await registerSuite('steered');

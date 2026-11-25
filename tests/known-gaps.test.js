@@ -1,3 +1,3 @@
 import { registerSuite } from './helpers.js';
 
-registerSuite('known-gaps');
+await registerSuite('known-gaps');

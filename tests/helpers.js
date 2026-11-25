@@ -13,8 +13,8 @@ export function loadFiles() {
 }
 
 /** Run one labelled suite and register one node:test per case. */
-export function registerSuite(id) {
-  const suite = runSuite(id, loadFiles());
+export async function registerSuite(id) {
+  const suite = await runSuite(id, loadFiles());
   for (const r of suite.results) {
     test(`${suite.title} · ${r.id} ${r.title}`, () => {
       assert.deepStrictEqual(r.actual, r.expected, r.detail);

@@ -6,16 +6,63 @@
 // Model-run suites (parse, agent) are not here; see model-eval.js.
 
 import { CATALOGUE } from './catalogue-data.js';
-import { parseInstant } from './time.js';
-import { normalizeMandate } from './mandate.js';
-import { compileMandate } from './rail.js';
-import { evaluate } from './policy.js';
-import { newState, recordOrder, undoOrder, approveOrder, setPaused } from './state.js';
-import { buildReceipt } from './receipt.js';
-import { checkPromotion } from './ladder.js';
-import { generateShadowEvents, summarizeEvents } from './shadow.js';
-import { buildProposal } from './proposal.js';
-import { coerceParsed } from './coerce.js';
+
+// Engine modules are loaded lazily and one by one, so a module that is missing
+// or broken fails only the suites that need it, with a message saying which.
+const LOADERS = {
+  time: () => import('./time.js'),
+  mandate: () => import('./mandate.js'),
+  rail: () => import('./rail.js'),
+  policy: () => import('./policy.js'),
+  state: () => import('./state.js'),
+  receipt: () => import('./receipt.js'),
+  ladder: () => import('./ladder.js'),
+  shadow: () => import('./shadow.js'),
+  proposal: () => import('./proposal.js'),
+  coerce: () => import('./coerce.js'),
+};
+
+let engine = null;
+
+async function loadEngine() {
+  if (engine) return engine;
+  const entries = await Promise.all(
+    Object.entries(LOADERS).map(async ([name, load]) => {
+      try {
+        return [name, await load()];
+      } catch (err) {
+        return [name, { __unavailable: String(err && err.message ? err.message : err) }];
+      }
+    }),
+  );
+  engine = Object.fromEntries(entries);
+  return engine;
+}
+
+function need(moduleName, fn) {
+  const m = engine && engine[moduleName];
+  const f = m && m[fn];
+  if (typeof f !== 'function') {
+    throw new Error(`${moduleName}.js: ${fn}() is not available${m && m.__unavailable ? ` (${m.__unavailable})` : ''}`);
+  }
+  return f;
+}
+
+const parseInstant = (...a) => need('time', 'parseInstant')(...a);
+const normalizeMandate = (...a) => need('mandate', 'normalizeMandate')(...a);
+const compileMandate = (...a) => need('rail', 'compileMandate')(...a);
+const evaluate = (...a) => need('policy', 'evaluate')(...a);
+const newState = (...a) => need('state', 'newState')(...a);
+const recordOrder = (...a) => need('state', 'recordOrder')(...a);
+const undoOrder = (...a) => need('state', 'undoOrder')(...a);
+const approveOrder = (...a) => need('state', 'approveOrder')(...a);
+const setPaused = (...a) => need('state', 'setPaused')(...a);
+const buildReceipt = (...a) => need('receipt', 'buildReceipt')(...a);
+const checkPromotion = (...a) => need('ladder', 'checkPromotion')(...a);
+const generateShadowEvents = (...a) => need('shadow', 'generateShadowEvents')(...a);
+const summarizeEvents = (...a) => need('shadow', 'summarizeEvents')(...a);
+const buildProposal = (...a) => need('proposal', 'buildProposal')(...a);
+const coerceParsed = (...a) => need('coerce', 'coerceParsed')(...a);
 
 // ---------------------------------------------------------------- registry
 
@@ -42,7 +89,8 @@ export function suiteFiles() {
 }
 
 /** @param {string} id @param {{[file: string]: any}} files parsed JSON by file stem */
-export function runSuite(id, files) {
+export async function runSuite(id, files) {
+  await loadEngine();
   const meta = SUITES.find((s) => s.id === id);
   if (!meta) throw new Error(`unknown suite ${id}`);
   const data = files[meta.file];
