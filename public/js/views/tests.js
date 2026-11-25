@@ -234,7 +234,7 @@ export function mount(root, ctx) {
       modelBox),
     h('section', { class: 'section', 'aria-labelledby': 'h-meta' },
       h('h2', { id: 'h-meta' }, 'Testing the tests'),
-      h('p', { class: 'intro' }, 'A test set can pass because it checks too little. So the engine was deliberately broken in 43 small ways (a limit that lets an exact match through, a day counted wrong, a check removed) to see whether the cases notice. The first run caught 35. The gaps it showed were closed with new labelled cases, and one of the misses turned out to change nothing anyone can observe and is listed separately. The final 43 of 43 is therefore not an independent result: those new cases were written to catch those changes.'),
+      h('p', { class: 'intro' }, 'A test set can pass because it checks too little. So the engine was deliberately broken in 43 small ways (a limit that lets an exact match through, a day counted wrong, a check removed) to see whether the cases notice. Re-running that check on the test set as it was first written, 36 of the 43 were caught. The 7 it missed were real gaps, and each was closed with a new labelled case. Two more changes alter nothing anyone can observe, and are listed separately. The final 43 of 43 is therefore not an independent result: the new cases were written to catch exactly those changes.'),
       h('p', null, h('a', { href: `${REPO}/blob/main/docs/EVIDENCE.md` }, 'Read the evidence notes'), ' and ', h('a', { href: `${REPO}/blob/main/eval/results/mutation-check.json` }, 'the mutation results'), ' on GitHub.'))));
 
   paintModel();

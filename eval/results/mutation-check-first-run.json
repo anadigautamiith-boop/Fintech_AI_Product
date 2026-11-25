@@ -1,0 +1,597 @@
+{
+  "summary": {
+    "generatedBy": "scripts/mutation-check.mjs",
+    "mutants": 43,
+    "killed": 36,
+    "survived": 7,
+    "invalid": 0,
+    "score": 0.8372093023255814,
+    "survivors": [
+      {
+        "id": "M10",
+        "file": "policy.js",
+        "note": "a shop is trusted unless it is explicitly marked unverified"
+      },
+      {
+        "id": "M15",
+        "file": "policy.js",
+        "note": "an unknown rung is treated as the most permissive one"
+      },
+      {
+        "id": "M21",
+        "file": "rail.js",
+        "note": "a month is 31 days when sizing the exposure"
+      },
+      {
+        "id": "M22",
+        "file": "rail.js",
+        "note": "renewals counted with floor instead of ceil minus one"
+      },
+      {
+        "id": "M23",
+        "file": "mandate.js",
+        "note": "a 90-day mandate is clamped and warned about"
+      },
+      {
+        "id": "M40",
+        "file": "proposal.js",
+        "note": "merged repeated lines can exceed the quantity limit"
+      },
+      {
+        "id": "M43",
+        "file": "coerce.js",
+        "note": "\"weekend\" means only Sunday"
+      }
+    ],
+    "expectedToSurvive": [
+      {
+        "id": "E01",
+        "file": "coerce.js",
+        "note": "reads model output keys without the own-property check",
+        "outcome": "survived",
+        "why": "The only keys read (merchants, categories, perOrderCap, ...) are not names found on Object.prototype, so no input can tell the two apart."
+      },
+      {
+        "id": "E02",
+        "file": "proposal.js",
+        "note": "a single line with a quantity of exactly 100 passes the per-line check",
+        "outcome": "survived",
+        "why": "The same limit is checked a second time after repeated lines are merged, which rejects 100 with the same error code. Only the list of offending SKUs inside the error can differ."
+      }
+    ],
+    "reproducedFrom": {
+      "testSet": "commit d1a9da2 (the test set before the cases the first run showed were missing)",
+      "script": "scripts/mutation-check.mjs as committed in c86fb26",
+      "note": "The c86fb26 commit message recorded 35 of 43 (81%) from the original run, whose mutant list was not saved. This file is the reproducible figure: 36 of 43 (84%). The seven survivors are the seven gaps that commit message names."
+    }
+  },
+  "results": [
+    {
+      "id": "M01",
+      "file": "policy.js",
+      "note": "per-order limit: an order exactly at the limit is blocked",
+      "outcome": "killed",
+      "failedTests": 7,
+      "firstFailing": [
+        "Policy engine · P004 Exactly the per-order cap is allowed to proceed (as an ask)",
+        "Policy engine · P042 The next day the daily cap resets",
+        "Policy engine · P045 A new month resets the period but not the rail block"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M02",
+      "file": "policy.js",
+      "note": "period limit: reaching the limit exactly is blocked",
+      "outcome": "killed",
+      "failedTests": 12,
+      "firstFailing": [
+        "Hostile and spoofed proposals · I11 Slow drip of equal small orders stops at the weekly cap",
+        "Policy engine · P034 Week total lands exactly on the cap: allowed",
+        "Policy engine · P038 A refunded order does not count toward the period cap"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M03",
+      "file": "policy.js",
+      "note": "rail block: using the last rupee is blocked",
+      "outcome": "killed",
+      "failedTests": 4,
+      "firstFailing": [
+        "Policy engine · P045 A new month resets the period but not the rail block",
+        "Policy engine · P049 Order exactly equal to what is left on the block is allowed",
+        "Policy engine · P055 No caps at all: the rail block is the only limit; spending exactly the block is allowed"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M04",
+      "file": "policy.js",
+      "note": "ask-above: an order exactly at the amount asks",
+      "outcome": "killed",
+      "failedTests": 6,
+      "firstFailing": [
+        "Hostile and spoofed proposals · I11 Slow drip of equal small orders stops at the weekly cap",
+        "Known gaps · KG3 Gift card sold inside an allowed grocery merchant",
+        "Policy engine · P003 Exactly ask-above is not above it: allowed"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M05",
+      "file": "policy.js",
+      "note": "duplicate window: exactly 30 minutes no longer counts",
+      "outcome": "killed",
+      "failedTests": 3,
+      "firstFailing": [
+        "Policy engine · P058 Duplicate window includes exactly 30 minutes",
+        "Policy engine · P067 Duplicate and split together are both reported, in spec order",
+        "Receipts · R12 Two ask reasons: both are explained"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M06",
+      "file": "policy.js",
+      "note": "split window: exactly 60 minutes no longer counts",
+      "outcome": "killed",
+      "failedTests": 2,
+      "firstFailing": [
+        "Policy engine · P063 Split pattern: two orders 60 minutes apart that together pass the per-order cap",
+        "Policy engine · P066 Split total one rupee over the per-order cap is a split pattern"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M07",
+      "file": "policy.js",
+      "note": "refunded orders still count toward the period spend",
+      "outcome": "killed",
+      "failedTests": 2,
+      "firstFailing": [
+        "Policy engine · P038 A refunded order does not count toward the period cap",
+        "Policy engine · Q01 Undo frees the week's spend but not the rail block"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M08",
+      "file": "policy.js",
+      "note": "the pause switch is ignored",
+      "outcome": "killed",
+      "failedTests": 4,
+      "firstFailing": [
+        "Policy engine · P020 Paused mandate blocks an otherwise fine order",
+        "Policy engine · P021 Paused is reported before expired",
+        "Policy engine · Q09 Pausing stops a pending approval; resuming lets it through"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M09",
+      "file": "policy.js",
+      "note": "the last day of a mandate is treated as expired",
+      "outcome": "killed",
+      "failedTests": 2,
+      "firstFailing": [
+        "Policy engine · P016 Last second of the mandate is still valid",
+        "Policy engine · P083 The last millisecond of the mandate is still valid"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M10",
+      "file": "policy.js",
+      "note": "a shop is trusted unless it is explicitly marked unverified",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "M11",
+      "file": "policy.js",
+      "note": "the allowed-categories rule is skipped",
+      "outcome": "killed",
+      "failedTests": 3,
+      "firstFailing": [
+        "Hostile and spoofed proposals · I01 A claimed category and a claimed approval are ignored",
+        "Policy engine · P007 Merchant and category outside the mandate: both reasons, in order",
+        "Policy engine · P054 Any-shop mandate still enforces the category"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M12",
+      "file": "policy.js",
+      "note": "asking about irreversible purchases is inverted",
+      "outcome": "killed",
+      "failedTests": 8,
+      "firstFailing": [
+        "Policy engine · P043 Monthly cap reached exactly: allowed",
+        "Policy engine · P045 A new month resets the period but not the rail block",
+        "Policy engine · P069 Recharge without permission for irreversible purchases: ask"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M13",
+      "file": "policy.js",
+      "note": "a proposal amount may be a string or a fraction",
+      "outcome": "killed",
+      "failedTests": 4,
+      "firstFailing": [
+        "Policy engine · P024 Paise (999.99) are not accepted in v1",
+        "Policy engine · P025 Amount as a string is invalid",
+        "Policy engine · P030 Amount beyond the safe integer range (1e21) is invalid"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M14",
+      "file": "policy.js",
+      "note": "at the top rung, \"ask\" cases execute without asking",
+      "outcome": "killed",
+      "failedTests": 20,
+      "firstFailing": [
+        "Hostile and spoofed proposals · I02 A claimed user approval does not remove an ask",
+        "Hostile and spoofed proposals · I12 The same order twice within seconds: the second needs a person",
+        "Hostile and spoofed proposals · I13 One large order cut into three to get under the per-order cap: the third trips the split rule"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M15",
+      "file": "policy.js",
+      "note": "an unknown rung is treated as the most permissive one",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "M16",
+      "file": "policy.js",
+      "note": "the rail block balance is not checked",
+      "outcome": "killed",
+      "failedTests": 5,
+      "firstFailing": [
+        "Policy engine · P048 Order larger than what is left on the merchant's block is blocked",
+        "Policy engine · P050 Rail use is gross: a refunded order does not give the block back",
+        "Policy engine · P056 No caps at all: one rupee more than the block is blocked by the rail"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M17",
+      "file": "time.js",
+      "note": "India time is taken as UTC+5:00",
+      "outcome": "killed",
+      "failedTests": 10,
+      "firstFailing": [
+        "Policy engine · P013 Saturday 00:00:00 IST is Saturday even though it is Friday in UTC",
+        "Policy engine · P014 Monday 00:00:00 IST is Monday even though it is Sunday in UTC",
+        "Policy engine · P017 First second after the mandate is expired"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M18",
+      "file": "time.js",
+      "note": "weekdays are off by one",
+      "outcome": "killed",
+      "failedTests": 16,
+      "firstFailing": [
+        "Hostile and spoofed proposals · I04 A claimed time is ignored: the app clock decides (Saturday)",
+        "Policy engine · P010 Saturday is a blocked day",
+        "Policy engine · P013 Saturday 00:00:00 IST is Saturday even though it is Friday in UTC"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M19",
+      "file": "rail.js",
+      "note": "block size uses the larger of the two figures",
+      "outcome": "killed",
+      "failedTests": 17,
+      "firstFailing": [
+        "Rail blocks · C01 Two merchants, two blocks of 10,000; 27,000 of potential spend needs two renewals",
+        "Rail blocks · C02 A bank that allows one block backs only the first merchant",
+        "Rail blocks · C03 Two blocks of 10,000 against 18,000 of potential spend: the rail allows more than the mandate"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M20",
+      "file": "rail.js",
+      "note": "one more block than the bank allows",
+      "outcome": "killed",
+      "failedTests": 4,
+      "firstFailing": [
+        "Rail blocks · C02 A bank that allows one block backs only the first merchant",
+        "Rail blocks · C09 The merchant listed first gets the block",
+        "Policy engine · P051 Bank allows one block: the second merchant has no backing, so ask"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M21",
+      "file": "rail.js",
+      "note": "a month is 31 days when sizing the exposure",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "M22",
+      "file": "rail.js",
+      "note": "renewals counted with floor instead of ceil minus one",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "M23",
+      "file": "mandate.js",
+      "note": "a 90-day mandate is clamped and warned about",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "M24",
+      "file": "mandate.js",
+      "note": "ask-above equal to the cap no longer warns",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Mandate validation · N19 Ask-above equal to the per-order cap never triggers: warning"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M25",
+      "file": "state.js",
+      "note": "undo at exactly the window is refused",
+      "outcome": "killed",
+      "failedTests": 3,
+      "firstFailing": [
+        "Policy engine · Q02 Groceries: undo at exactly 15 minutes works; a second undo is refused",
+        "Policy engine · Q04 Food delivery: 3-minute window, inclusive",
+        "Policy engine · Q06 Marketplace: 60-minute window, inclusive"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M26",
+      "file": "state.js",
+      "note": "irreversible purchases are not recognised as such",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Policy engine · Q05 Recharge cannot be undone; an unknown order id is refused"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M27",
+      "file": "state.js",
+      "note": "approving an order skips the re-check, so a blocked order executes",
+      "outcome": "killed",
+      "failedTests": 2,
+      "firstFailing": [
+        "Policy engine · Q08 Approval re-runs the checks: a blocked day at approval time refuses it",
+        "Policy engine · Q09 Pausing stops a pending approval; resuming lets it through"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M28",
+      "file": "ladder.js",
+      "note": "a segment at exactly 10% passes",
+      "outcome": "killed",
+      "failedTests": 4,
+      "firstFailing": [
+        "a segment at exactly 10% fails and one override fewer passes, for every size from 50 to 2,000 events",
+        "odd sizes: 33 of 330, 77 of 770 and 123 of 1,230 are exactly 10% and fail",
+        "Shadow mode and promotion gate · S10 A segment at exactly 10% fails: the rate must be below 10%"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M29",
+      "file": "ladder.js",
+      "note": "an overall rate at exactly 10% passes",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Shadow mode and promotion gate · S12 Every segment at exactly 10%: the overall rate fails too"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M30",
+      "file": "ladder.js",
+      "note": "exactly the minimum number of weeks is refused",
+      "outcome": "killed",
+      "failedTests": 11,
+      "firstFailing": [
+        "Shadow mode and promotion gate · S01 Overall 8.6% looks fine, but the family segment is at 26%: promotion is refused",
+        "Shadow mode and promotion gate · S02 Every segment under 10%, 8 weeks, consent given: move to bounded",
+        "Shadow mode and promotion gate · S03 Good evidence but no consent: bounded needs the person's say-so"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M31",
+      "file": "ladder.js",
+      "note": "a segment with exactly 50 events counts as too small",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "a segment at exactly 10% fails and one override fewer passes, for every size from 50 to 2,000 events"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M32",
+      "file": "ladder.js",
+      "note": "moving to the top rung needs no consent",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Shadow mode and promotion gate · S03 Good evidence but no consent: bounded needs the person's say-so"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M33",
+      "file": "ladder.js",
+      "note": "the gate judges only the overall rate, not each segment (the MoneyGro mistake)",
+      "outcome": "killed",
+      "failedTests": 6,
+      "firstFailing": [
+        "a segment at exactly 10% fails and one override fewer passes, for every size from 50 to 2,000 events",
+        "odd sizes: 33 of 330, 77 of 770 and 123 of 1,230 are exactly 10% and fail",
+        "Shadow mode and promotion gate · S01 Overall 8.6% looks fine, but the family segment is at 26%: promotion is refused"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M34",
+      "file": "receipt.js",
+      "note": "an undo button on a purchase that cannot be undone",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Receipts · R08 Executed recharge: says it cannot be undone and offers no undo"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M35",
+      "file": "money.js",
+      "note": "amounts grouped in thousands instead of the Indian lakh style",
+      "outcome": "killed",
+      "failedTests": 2,
+      "firstFailing": [
+        "Receipts · R10 A ten-million-rupee order: Indian digit grouping, every hard limit named",
+        "formatRupees uses Indian digit grouping and refuses non-integers"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M36",
+      "file": "shadow.js",
+      "note": "the hidden-gap data set has no gap",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Shadow mode and promotion gate · S14 Hidden-gap set: overall rate under 10%, family segment over 10%, promotion refused"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M37",
+      "file": "catalogue.js",
+      "note": "lookups follow the prototype chain, so \"constructor\" resolves to a function",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Agent output to proposal · B16 SKUs named like object internals are unknown"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M38",
+      "file": "proposal.js",
+      "note": "repeated lines for one item overwrite each other instead of adding up",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Agent output to proposal · B14 Lines for the same SKU are merged"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M39",
+      "file": "proposal.js",
+      "note": "an order spanning two shops is accepted",
+      "outcome": "killed",
+      "failedTests": 2,
+      "firstFailing": [
+        "Agent output to proposal · B05 SKUs from two shops in one order are an error",
+        "If the agent is fooled · A09 Listing text tells the agent to add a recharge from another shop"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M40",
+      "file": "proposal.js",
+      "note": "merged repeated lines can exceed the quantity limit",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "M41",
+      "file": "coerce.js",
+      "note": "a shop name that cannot be matched is dropped without a word (could widen a mandate)",
+      "outcome": "killed",
+      "failedTests": 3,
+      "firstFailing": [
+        "Mandate-reader output to form · K03 A shop that is not in the catalogue is reported, not dropped silently",
+        "Mandate-reader output to form · K04 Known and unknown shops together: the known one is kept, the unknown one is reported",
+        "Mandate-reader output to form · K16 Instruction-like text inside values is not a shop or a category"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M42",
+      "file": "coerce.js",
+      "note": "any truthy value, such as the text \"false\", switches on auto-approval of irreversible purchases",
+      "outcome": "killed",
+      "failedTests": 1,
+      "firstFailing": [
+        "Mandate-reader output to form · K12 The permission for irreversible purchases is true only for the boolean true"
+      ],
+      "timedOut": false
+    },
+    {
+      "id": "M43",
+      "file": "coerce.js",
+      "note": "\"weekend\" means only Sunday",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "E01",
+      "file": "coerce.js",
+      "note": "reads model output keys without the own-property check",
+      "equivalent": true,
+      "why": "The only keys read (merchants, categories, perOrderCap, ...) are not names found on Object.prototype, so no input can tell the two apart.",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    },
+    {
+      "id": "E02",
+      "file": "proposal.js",
+      "note": "a single line with a quantity of exactly 100 passes the per-line check",
+      "equivalent": true,
+      "why": "The same limit is checked a second time after repeated lines are merged, which rejects 100 with the same error code. Only the list of offending SKUs inside the error can differ.",
+      "outcome": "survived",
+      "failedTests": 0,
+      "firstFailing": [],
+      "timedOut": false
+    }
+  ]
+}
