@@ -73,6 +73,13 @@
       "paused": true, "now": "2027-02-01T10:00:00+05:30", "proposal": { "merchantId": "freshbasket", "amount": 500 },
       "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MANDATE_PAUSED"], "figures": null } },
 
+    { "id": "P083", "group": "time", "title": "The last millisecond of the mandate is still valid",
+      "now": "2027-01-28T23:59:59.999+05:30", "proposal": { "merchantId": "freshbasket", "amount": 500 },
+      "expect": { "verdict": "allow", "outcome": "executed", "reasons": [] } },
+    { "id": "P084", "group": "time", "title": "The last millisecond before the mandate starts is too early",
+      "now": "2026-11-29T23:59:59.999+05:30", "proposal": { "merchantId": "freshbasket", "amount": 500 },
+      "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["MANDATE_NOT_STARTED"], "figures": null } },
+
     { "id": "P022", "group": "invalid", "title": "Zero amount is an invalid proposal",
       "proposal": { "merchantId": "freshbasket", "amount": 0 },
       "expect": { "verdict": "block", "outcome": "blocked", "reasons": ["INVALID_PROPOSAL"], "figures": null } },
