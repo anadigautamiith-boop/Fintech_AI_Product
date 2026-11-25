@@ -53,4 +53,15 @@ What these numbers are and are not:
 
 ## 3. Cost
 
-The Worker reports token counts for each call, and the Tests page sums them. The price in Cloudflare's "neurons" depends on the model and on how the platform counts, and is not worked out here. When the runs above are done, the token totals in the downloaded files can be set against the free allowance (10,000 neurons a day, per Cloudflare's documentation at the time of writing) once the neuron price of the model has been checked.
+Workers AI prices a call per token and states the price in "neurons". For the model in use, `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, that is 26,668 neurons per million input tokens and 204,805 per million output tokens. The free plan includes 10,000 neurons a day, reset at 00:00 UTC (Cloudflare's pricing page, checked 26 November 2026).
+
+The Worker passes on the token counts the platform reports for each call, and the Tests page sums them and puts them in the downloaded file. Neurons are not worked out in the app: they are the platform's unit, and its conversion may change.
+
+Before any real run, an estimate from the size of the prompts the Worker builds (3 to 4 characters per token, and assumed answers of 140 tokens for the reader and 90 for the agent) is:
+
+| Run | Calls | Neurons per call | Neurons per run |
+|---|---|---|---|
+| Mandate reader | 30 | about 45 to 50 | about 1,350 to 1,500 |
+| Shopping agent | 10 | about 27 to 30 | about 270 to 300 |
+
+So the three runs recommended above would use about 2,000 neurons, a fifth of one day's allowance. This is an estimate from character counts, not a measurement. Replace it with the real figures from the downloaded files: tokens in, tokens out, and the prices above.

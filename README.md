@@ -47,13 +47,18 @@ PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs CHROME_PATH=/usr/bin/google-chro
 
 The site is a Worker with static assets: `public/` is the site and `src/worker/` answers `/api/*`, calling Workers AI. There is nothing to build.
 
-1. Cloudflare dashboard, **Workers & Pages**, **Create**, **Import a repository**, and choose this repository.
-2. Leave the build command empty. Set the deploy command to `npx wrangler deploy`. The production branch is `main`.
-3. After the first deploy, open the `*.workers.dev` address it shows. The masthead says "AI connected" when the AI binding works; if it says "AI not connected", the two AI features fall back to the form and to the scripted assistant.
+1. In the Cloudflare dashboard, go to **Workers & Pages**, choose **Create application**, choose **GitHub**, let Cloudflare read this repository, and select it.
+2. Set the project (Worker) name to **`reins-fintech-ai-product`**. It must match `name` in `wrangler.jsonc`, or the build fails.
+3. Leave the build command empty. The deploy command is `npx wrangler deploy` (the default) and the branch is `main` (the default). Choose **Save and Deploy**.
+4. Open the `*.workers.dev` address it shows. The masthead says "AI connected" when the AI binding works. If it says "AI not connected", the two AI features fall back to the form and to the scripted assistant.
 
-`wrangler.jsonc` already names the static folder and the AI binding. The free plan's daily AI allowance is limited; when it runs out the AI features report that and the rest of the app keeps working.
+Every later push to `main` deploys again. `wrangler.jsonc` already names the static folder and the AI binding. From a computer with Wrangler logged in, `npm run dev` runs the same thing locally and `npm run deploy` deploys it. Cloudflare's own pages for these steps: [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) and [build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/); dashboard wording changes now and then.
 
-From a computer with Wrangler logged in, `npm run dev` runs the same thing locally and `npm run deploy` deploys it.
+What the free plan means here (Cloudflare documentation, checked 26 November 2026):
+
+- Requests for the static files are free and unlimited ([billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)). The Worker, which serves only the three `/api/` routes, is limited to 100,000 requests a day and 10 ms of CPU per request ([limits](https://developers.cloudflare.com/workers/platform/limits/)).
+- Workers AI includes 10,000 neurons a day, reset at 00:00 UTC (09:00 in Japan, 05:30 in India). After that, AI calls fail with an error and the app falls back ([pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)). The model used, `@cf/meta/llama-3.3-70b-instruct-fp8-fast`, costs 26,668 neurons per million input tokens and 204,805 per million output tokens. An estimate from the prompt sizes (3 to 4 characters a token) puts a reader call at roughly 45 to 50 neurons and an agent call at roughly 27 to 30, so one run of each model suite (see [eval/README.md](eval/README.md)) is about 2,000 neurons, a fifth of a day's allowance. The real token counts are in the files the Tests page downloads.
+- `public/_headers` (the security headers) applies to the static files only. Cloudflare does not apply it to responses from the Worker ([docs](https://developers.cloudflare.com/workers/static-assets/headers/)), so the API sets its own.
 
 ## Tests
 
