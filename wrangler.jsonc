@@ -1,0 +1,17 @@
+{
+  // Reins on Cloudflare: a static site (public/) plus a small Worker (src/worker/)
+  // for the two AI calls. Deploy with `npx wrangler deploy`; no build step.
+  "name": "reins-fintech-ai-product",
+  "main": "src/worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

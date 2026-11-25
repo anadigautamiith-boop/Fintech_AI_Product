@@ -3,9 +3,11 @@
 // The same code runs in Node (`npm test`) and in the browser (the Tests page),
 // so a case that passes in one passes in the other. A runner never throws for a
 // failing case: it returns a result with `expected` and `actual` that differ.
-// Model-run suites (parse, agent) are not here; see model-eval.js.
+// The model-run suites (parse, agent) use runModelSuite at the end of this file,
+// which needs a live Worker; their scoring is in model-eval.js.
 
 import { CATALOGUE } from './catalogue-data.js';
+import { scoreAgent, scoreParse, summarizeAgent, summarizeParse } from './model-eval.js';
 
 // Engine modules are loaded lazily and one by one, so a module that is missing
 // or broken fails only the suites that need it, with a message saying which.
@@ -470,4 +472,65 @@ function runSteered(s, defaults, shared) {
     }
   }
   return result({ id: s.id, group: s.kind, title: s.title }, expected, actual);
+}
+
+// ---------------------------------------------------------------- model suites
+
+/**
+ * Runs a model suite against the live Worker. `callApi(path, body)` returns the
+ * Worker's JSON answer, or `{ok: false, error}`, and must not throw. Cases run
+ * one after another so the free daily allowance is used slowly and the page
+ * can show progress. An error from the Worker counts as a failed case and is
+ * reported as an error, never skipped.
+ *
+ * @param {'parse'|'agent'} id
+ * @param {{[file: string]: any}} files parsed JSON by file stem
+ * @param {(path: string, body: object) => Promise<object>} callApi
+ * @param {{guard?: boolean, onResult?: Function, shouldStop?: () => boolean}} [options]
+ */
+export async function runModelSuite(id, files, callApi, { guard = true, onResult, shouldStop } = {}) {
+  await loadEngine();
+  const meta = MODEL_SUITES.find((s) => s.id === id);
+  if (!meta) throw new Error(`unknown model suite ${id}`);
+  const data = files[meta.file];
+  const shared = files.shared;
+  const list = id === 'parse' ? data.cases : data.scenarios;
+  const results = [];
+  for (const c of list) {
+    if (shouldStop && shouldStop()) break;
+    let r;
+    try {
+      r = id === 'parse' ? await runParseCase(c, data, callApi) : await runAgentCase(c, data, shared, callApi, guard);
+    } catch (err) {
+      r = { id: c.id, group: 'error', title: c.title ?? c.text ?? c.id, status: 'error', pass: false, message: String(err && err.message ? err.message : err) };
+    }
+    results.push(r);
+    if (onResult) onResult(r, results.length, list.length);
+  }
+  const counts = { total: results.length, pass: 0, fail: 0, error: 0 };
+  for (const r of results) {
+    if (r.status === 'error') counts.error += 1;
+    else if (r.pass) counts.pass += 1;
+    else counts.fail += 1;
+  }
+  const summary = id === 'parse' ? summarizeParse(results) : summarizeAgent(results);
+  return { id, title: meta.title, blurb: meta.blurb, results, counts, summary, guard: id === 'agent' ? guard : undefined, complete: results.length === list.length };
+}
+
+async function runParseCase(gold, data, callApi) {
+  const api = await callApi('/api/parse-mandate', { text: gold.text });
+  return scoreParse(gold, data.defaults, api);
+}
+
+async function runAgentCase(s, data, shared, callApi, guard) {
+  const api = await callApi('/api/agent', { request: s.request, skus: s.skus, listingOverrides: s.listingOverrides ?? {}, guard });
+  if (!api || api.ok !== true) return scoreAgent(s, { api, built: null, decision: null });
+  // The order is rebuilt and judged here from the model's raw output, not taken from the Worker's copy.
+  const built = buildProposal(CATALOGUE, api.output);
+  let decision = null;
+  if (built.ok) {
+    const { mandate, compiled, rung, now } = orderContext(s, data.defaults, shared);
+    decision = evaluate({ mandate, compiled, state: newState(), proposal: built.proposal, now: parseInstant(now), catalogue: CATALOGUE, rung });
+  }
+  return scoreAgent(s, { api, built, decision });
 }
