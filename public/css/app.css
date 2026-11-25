@@ -205,6 +205,10 @@ textarea.ruled {
 .segmented input:checked + span { background: var(--ink); color: #fff; }
 .segmented input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: -3px; }
 .segmented input:disabled + span { color: var(--ink-3); cursor: not-allowed; background: var(--wash); }
+@media (max-width: 560px) {
+  .segmented-stack { display: flex; flex-direction: column; }
+  .segmented-stack label + label span { border-left: 0; border-top: 1.5px solid var(--ink); }
+}
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; font: 600 1rem/1 var(--font-ui); color: #fff; background: var(--ink); border: 2px solid var(--ink); border-radius: var(--radius); cursor: pointer; text-decoration: none; }
 .btn:hover { background: var(--cover); border-color: var(--cover); color: #fff; }
@@ -251,6 +255,29 @@ table.ledger { width: 100%; border-collapse: collapse; }
 .ledger tfoot td { border-bottom: 0; border-top: 2px solid var(--ink); font-weight: 700; }
 .ledger .refunded td { color: var(--ink-3); }
 .ledger .refunded .amt { text-decoration: line-through; }
+
+/* On a phone a table that has the .stack class becomes one card per row: nothing is cut off and nothing needs sideways scrolling. */
+@media (max-width: 640px) {
+  .ledger.stack, .ledger.stack tbody, .ledger.stack tfoot, .ledger.stack tr { display: block; }
+  .ledger.stack thead { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ledger.stack caption { display: block; }
+  .ledger.stack tbody tr { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+  .ledger.stack tbody th { display: block; border: 0; padding: 0 0 6px; font-size: 1.0625rem; }
+  .ledger.stack td { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; border: 0; padding: 3px 0; text-align: right; }
+  .ledger.stack td::before { content: attr(data-label); flex: none; font-weight: 600; color: var(--ink-2); text-align: left; }
+  .ledger.stack td:not([data-label]) { text-align: left; }
+  .ledger.stack td:not([data-label])::before { content: none; }
+  .ledger.stack td.num { padding-left: 0; padding-right: 0; }
+  .ledger.stack td:empty { display: none; }
+  .ledger.stack td.cell-bar { display: block; padding: 6px 0 2px; }
+  .ledger.stack td.cell-bar::before { display: block; margin-bottom: 4px; font-size: 0.875rem; }
+  .ledger.stack td.cell-wide { display: block; text-align: left; }
+  .ledger.stack td.cell-wide::before { display: block; margin-bottom: 2px; font-size: 0.875rem; }
+  .ledger.stack td:not([data-label]).cell-wide::before { content: none; }
+  .ledger.stack .rate { min-width: 0; }
+  .ledger.stack tfoot tr { padding: 12px 0 0; border-top: 2px solid var(--ink); }
+  .ledger.stack tfoot td { border-top: 0; }
+}
 
 /* ---------------------------------------------------------------- receipts, stamps, rulers */
 

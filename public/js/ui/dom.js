@@ -47,3 +47,30 @@ export function notice(tone, lead, ...rest) {
 }
 
 export const pluralize = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Lets a table turn into stacked cards on a narrow screen (the CSS does the turning).
+ * Each cell remembers its column heading, and the table keeps its meaning for
+ * assistive technology even when the layout stops being a table.
+ */
+export function stackable(table) {
+  const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+  table.classList.add('stack');
+  table.setAttribute('role', 'table');
+  for (const part of table.querySelectorAll('thead, tbody, tfoot')) part.setAttribute('role', 'rowgroup');
+  for (const row of table.querySelectorAll('tr')) {
+    row.setAttribute('role', 'row');
+    let col = 0;
+    for (const cell of row.children) {
+      const span = Number(cell.getAttribute('colspan') || 1);
+      if (cell.tagName === 'TH') cell.setAttribute('role', cell.getAttribute('scope') === 'row' ? 'rowheader' : 'columnheader');
+      else {
+        cell.setAttribute('role', 'cell');
+        const inFoot = row.parentElement.tagName === 'TFOOT';
+        if (heads[col] && span === 1 && !(inFoot && col === 0)) cell.dataset.label = heads[col];
+      }
+      col += span;
+    }
+  }
+  return table;
+}

@@ -2,7 +2,7 @@
 // no AI run here, in the browser, when the page opens. The two that use the AI
 // model run only on request, one case at a time, and can be saved as a file.
 
-import { h, fill, notice, tag, pluralize } from '../ui/dom.js';
+import { h, fill, notice, tag, pluralize, stackable } from '../ui/dom.js';
 import { percent } from '../ui/format.js';
 import { SUITES, MODEL_SUITES, runSuite, runModelSuite } from '../core/suites.js';
 
@@ -23,20 +23,22 @@ function resultTag(r) {
 }
 
 /** A table of cases. A case that did not pass shows what was expected and what happened. */
-function caseTable(results, { columns = [], detail } = {}) {
+function caseTable(results, { columns = [], detail, stack = false } = {}) {
   const rows = [];
   for (const r of results) {
     rows.push(h('tr', null,
       h('td', { class: 'case-id' }, r.id),
-      h('td', null, r.title || r.group || ''),
+      h('td', { class: 'cell-wide' }, r.title || r.group || ''),
       ...columns.map((c) => h('td', null, c.value(r))),
       h('td', null, resultTag(r))));
     const more = r.status === 'pass' ? null : detail ? detail(r) : null;
     if (more) rows.push(h('tr', null, h('td', { colspan: String(3 + columns.length) }, more)));
   }
-  return h('div', { class: 'table-wrap' }, h('table', { class: 'ledger' },
+  const table = h('table', { class: 'ledger' },
     h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Case'), h('th', { scope: 'col' }, 'What it checks'), ...columns.map((c) => h('th', { scope: 'col' }, c.head)), h('th', { scope: 'col' }, 'Result'))),
-    h('tbody', null, rows)));
+    h('tbody', null, rows));
+  // Tables with extra columns would be cut off on a phone, so they become one card per case there.
+  return h('div', { class: 'table-wrap' }, stack ? stackable(table) : table);
 }
 
 function engineDetail(r) {
@@ -184,8 +186,8 @@ export function mount(root, ctx) {
 
   function details(meta, done) {
     const table = meta.id === 'parse'
-      ? caseTable(done.results, { columns: [{ head: 'Fields right', value: (r) => (r.fieldsTotal ? `${r.fieldsMatched} of ${r.fieldsTotal}` : '') }], detail: parseDetail })
-      : caseTable(done.results, { columns: [{ head: 'Went for the trap', value: (r) => (r.group === 'hostile' && r.status !== 'error' ? (r.steered ? 'Yes' : 'No') : '') }, { head: 'Engine said', value: (r) => r.verdict ?? '' }], detail: agentDetail });
+      ? caseTable(done.results, { columns: [{ head: 'Fields right', value: (r) => (r.fieldsTotal ? `${r.fieldsMatched} of ${r.fieldsTotal}` : '') }], detail: parseDetail, stack: true })
+      : caseTable(done.results, { columns: [{ head: 'Went for the trap', value: (r) => (r.group === 'hostile' && r.status !== 'error' ? (r.steered ? 'Yes' : 'No') : '') }, { head: 'Engine said', value: (r) => r.verdict ?? '' }], detail: agentDetail, stack: true });
     return h('details', null, h('summary', null, `Show all ${done.counts.total} cases`), table);
   }
 

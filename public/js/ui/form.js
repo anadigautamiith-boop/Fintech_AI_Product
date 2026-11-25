@@ -27,10 +27,10 @@ export function chipGroup({ legend, help, options, values, onChange, describedBy
   };
 }
 
-/** A single-choice control that looks like one bar. `options`: [{value, label}]. */
-export function segmented({ legend, help, name, options, value, onChange }) {
+/** A single-choice control that looks like one bar. `options`: [{value, label}]. `stacked`: one option per line on a narrow screen (for long labels). */
+export function segmented({ legend, help, name, options, value, onChange, stacked = false }) {
   const inputs = new Map();
-  const bar = h('div', { class: 'segmented' });
+  const bar = h('div', { class: stacked ? 'segmented segmented-stack' : 'segmented' });
   for (const o of options) {
     const input = h('input', { type: 'radio', name, value: String(o.value), checked: String(o.value) === String(value), disabled: o.disabled });
     input.addEventListener('change', () => { if (input.checked) onChange(o.value); });

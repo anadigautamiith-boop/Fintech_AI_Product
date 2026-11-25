@@ -3,7 +3,7 @@
 // screen can show how the gate behaves, including the case where an average
 // looks fine and one group is struggling. There is no way around the gate.
 
-import { h, fill, notice, tag } from '../ui/dom.js';
+import { h, fill, notice, tag, stackable } from '../ui/dom.js';
 import { segmented } from '../ui/form.js';
 import { percent } from '../ui/format.js';
 import { RUNGS, RUNG_LABELS, DEFAULT_MIN_EVENTS, DEFAULT_THRESHOLD } from '../core/ladder.js';
@@ -38,6 +38,7 @@ export function mount(root, ctx) {
     ],
     value: s0.evidence.set,
     onChange: (v) => store.setEvidence({ set: v }),
+    stacked: true,
   });
   const weeks = h('input', { type: 'range', id: 'weeks', min: '1', max: '12', step: '1', value: String(s0.evidence.weeks), class: 'range' });
   const weeksOut = h('output', { for: 'weeks', class: 'clock-now' });
@@ -78,17 +79,17 @@ export function mount(root, ctx) {
         h('td', { class: 'num' }, String(b.events)),
         h('td', { class: 'num' }, String(b.overrides)),
         h('td', { class: 'num' }, percent(b.rate)),
-        h('td', null, h('div', { class: 'rate', 'aria-hidden': 'true' }, bar, place(h('div', { class: 'rate-fence' }), 'left', (DEFAULT_THRESHOLD / BAR_SCALE) * 100))),
+        h('td', { class: 'cell-bar' }, h('div', { class: 'rate', 'aria-hidden': 'true' }, bar, place(h('div', { class: 'rate-fence' }), 'left', (DEFAULT_THRESHOLD / BAR_SCALE) * 100))),
         h('td', null, tag(judged[0], judged[1])));
     });
     const o = gate.overall;
-    fill(tableBox, h('div', { class: 'table-wrap' }, h('table', { class: 'ledger' },
+    fill(tableBox, h('div', { class: 'table-wrap' }, stackable(h('table', { class: 'ledger' },
       h('caption', null, `Invented record: ${ev.summary.weeks} ${ev.summary.weeks === 1 ? 'week' : 'weeks'}, ${SHADOW_EVENTS_PER_WEEK} orders a week`),
       h('thead', null, h('tr', null,
         h('th', { scope: 'col' }, 'Group'), h('th', { scope: 'col', class: 'num' }, 'Orders'), h('th', { scope: 'col', class: 'num' }, 'Overridden'),
         h('th', { scope: 'col', class: 'num' }, 'Override rate'), h('th', { scope: 'col' }, `Against the ${Math.round(DEFAULT_THRESHOLD * 100)}% line (dashed)`), h('th', { scope: 'col' }, 'Judged'))),
       h('tbody', null, rows),
-      h('tfoot', null, h('tr', null, h('td', null, 'All groups'), h('td', { class: 'num' }, String(o.events)), h('td', { class: 'num' }, String(o.overrides)), h('td', { class: 'num' }, percent(o.rate)), h('td'), h('td'))))));
+      h('tfoot', null, h('tr', null, h('td', null, 'All groups'), h('td', { class: 'num' }, String(o.events)), h('td', { class: 'num' }, String(o.overrides)), h('td', { class: 'num' }, percent(o.rate)), h('td'), h('td')))))));
   }
 
   function renderGate(s, ev) {

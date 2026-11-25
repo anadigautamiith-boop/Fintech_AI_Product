@@ -3,7 +3,7 @@
 // order is built from catalogue prices and checked by the engine; this screen
 // draws the outcome and passes the person's buttons to the store.
 
-import { h, fill, notice, tag } from '../ui/dom.js';
+import { h, fill, notice, tag, stackable } from '../ui/dom.js';
 import { segmented } from '../ui/form.js';
 import { renderSlip } from '../ui/slip.js';
 import { formatShort, percent, rupees } from '../ui/format.js';
@@ -57,6 +57,7 @@ export function mount(root, ctx) {
       ],
       value: mode,
       onChange: (v) => { mode = v; modeTouched = true; paintMode(); paintAsk(); },
+      stacked: true,
     });
     fill(modeHost, modeControl.el);
     paintMode();
@@ -233,11 +234,11 @@ export function mount(root, ctx) {
     const blocks = s.compiled ? s.compiled.blocks : [];
     fill(statementBox,
       ledger.length
-        ? h('div', { class: 'table-wrap' }, h('table', { class: 'ledger' },
+        ? h('div', { class: 'table-wrap' }, stackable(h('table', { class: 'ledger' },
           h('caption', null, 'Statement (simulated money)'),
           h('thead', null, h('tr', null, ['When', 'Shop', 'Kind'].map((t) => h('th', { scope: 'col' }, t)), h('th', { scope: 'col', class: 'num' }, 'Amount'), h('th', { scope: 'col' }, 'Status'))),
           h('tbody', null, rows),
-          h('tfoot', null, h('tr', null, h('td', { colspan: '3' }, 'Spent and kept'), h('td', { class: 'num' }, rupees(kept)), h('td')))))
+          h('tfoot', null, h('tr', null, h('td', { colspan: '3' }, 'Spent and kept'), h('td', { class: 'num' }, rupees(kept)), h('td'))))))
         : h('p', { class: 'small' }, 'Nothing has been paid yet.'),
       h('h3', { class: 'sub' }, 'How it is going'),
       m.executed === 0
